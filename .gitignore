@@ -1,0 +1,22 @@
+# ── dependencies / build artifacts ──
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# ── secrets / env ──
+.env
+.env.*
+!.env.example
+
+# ── legacy Access sources (large binaries containing patient PHI) ──
+*.accdb
+*.accde
+
+# ── extracted patient data (REAL PHI — must never be committed) ──
+extraction/data/
+
+# ── OS / misc ──
+.DS_Store
+*.log
