@@ -1,0 +1,545 @@
+// NextDent web app — target schema, reverse-engineered from the legacy Access DB.
+// See ../extraction/data-model.md for the Access→Postgres mapping and rationale.
+// Migrated entities keep their legacy integer id as PK (autoincrement so new rows still work;
+// ETL inserts explicit ids then bumps the sequence). New tables (history/search) use fresh ids.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── enums ───────────────────────────
+enum Role {
+  OWNER
+  DOCTOR
+  RECEPTIONIST
+  ASSISTANT
+}
+
+enum HistoryKind {
+  MEDICAL
+  DRUG
+  ALLERGY
+}
+
+// ─────────────────────── identity & security ───────────────────────
+model Person {
+  id             Int       @id @default(autoincrement())
+  fullName       String
+  nickName       String?
+  primaryPhone   String?
+  secondaryPhone String?
+  address        String?
+  email          String?
+  dob            DateTime?
+  gender         String?
+  maritalStatus  String?
+  nid            String?
+  note           String?
+  activeStatus   Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+
+  user   User?
+  doctor Doctor?
+}
+
+model User {
+  id                 Int      @id @default(autoincrement())
+  person             Person   @relation(fields: [personId], references: [id])
+  personId           Int      @unique
+  username           String   @unique
+  passwordHash       String   @default("") // legacy VBA hash NOT migrated
+  role               Role     @default(RECEPTIONIST)
+  activeStatus       Boolean  @default(true)
+  needsPasswordReset Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  auditLogs AuditLog[]
+  sessions  Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent String?
+
+  @@index([userId])
+}
+
+model Doctor {
+  id                    Int      @id @default(autoincrement())
+  person                Person   @relation(fields: [personId], references: [id])
+  personId              Int      @unique
+  isOwner               Boolean  @default(false)
+  degree                String?
+  designation1          String?
+  designation2          String?
+  clinicName            String?
+  institute             String?
+  session               String?
+  regNo                 String?
+  activeStatus          String?
+  labBillReductionMethod String?
+  revenueShare          Json? // owner/guest/OT/chamber % per case type — confirm formula (data-model §4.3)
+  note                  String?
+
+  patients          Patient[]      @relation("ConsultantDoctor")
+  appointments      Appointment[]
+  treatmentLines    TreatmentLine[] @relation("OperatingDoctor")
+  prescriptions     Prescription[]
+}
+
+// ─────────────────────────── patients ───────────────────────────
+model Patient {
+  id                 Int       @id @default(autoincrement())
+  fullName           String
+  nickName           String?
+  email              String?
+  primaryPhone       String?
+  phoneDigits        String? // normalized digits-only, for dash-insensitive search
+  foreignPhone       String?
+  since              DateTime?
+  dob                DateTime?
+  address            String?
+  gender             String?
+  maritalStatus      String?
+  occupation         String?
+  emergencyRelation  String?
+  emergencyName      String?
+  emergencyPhone     String?
+  photoPath          String?
+  photoUrl           String?
+  lifetimeDiscount   Float     @default(0)
+  medicalHistory     String?
+  drugHistory        String?
+  note               String?
+  consultantDoctor   Doctor?   @relation("ConsultantDoctor", fields: [consultantDoctorId], references: [id])
+  consultantDoctorId Int?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  cases            TreatmentCase[]
+  appointments     Appointment[]
+  prescriptions    Prescription[]
+  clinicalNotes    ClinicalNote[]
+  historyVersions  PatientHistoryVersion[]
+  toothEntries     ToothChartEntry[]
+  attachments      Attachment[]
+  recalls          Recall[]
+  events           PatientEvent[]
+
+  @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([nickName(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([phoneDigits])
+}
+
+// ─────────────────────── treatment & billing ───────────────────────
+model Treatment {
+  id           Int     @id @default(autoincrement())
+  name         String  @unique
+  defaultPrice Int     @default(0)
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+model TreatmentCase {
+  id          Int     @id @default(autoincrement())
+  patient     Patient @relation(fields: [patientId], references: [id])
+  patientId   Int
+  name        String?
+  description String?
+  status      String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  lines TreatmentLine[]
+}
+
+model TreatmentLine {
+  id                  Int       @id @default(autoincrement())
+  case                TreatmentCase @relation(fields: [caseId], references: [id])
+  caseId              Int
+  operatingDoctor     Doctor?   @relation("OperatingDoctor", fields: [operatingDoctorId], references: [id])
+  operatingDoctorId   Int?
+  treatmentDate       DateTime?
+  treatmentName       String?
+  description         String?
+  totalAmount         Int       @default(0)
+  discountPercent     Float     @default(0)
+  afterDiscountAmount Int       @default(0)
+  amountPaid          Int       @default(0)
+  note                String?
+
+  payments Payment[]
+  teeth    TreatmentLineTooth[]
+}
+
+// NEW: proper payment ledger (legacy tracked only a running amountPaid on the line)
+model Payment {
+  id              Int       @id @default(autoincrement())
+  treatmentLine   TreatmentLine @relation(fields: [treatmentLineId], references: [id])
+  treatmentLineId Int
+  amount          Int
+  method          String?
+  paidAt          DateTime  @default(now())
+  note            String?
+}
+
+// ─────────────────────────── appointments ───────────────────────────
+model Appointment {
+  id             Int       @id @default(autoincrement())
+  doctor         Doctor?   @relation(fields: [doctorId], references: [id])
+  doctorId       Int?
+  patient        Patient   @relation(fields: [patientId], references: [id])
+  patientId      Int
+  allocatedUnit  String?
+  statusCode     Int? // legacy AppointmentStatusID — meaning TBD (data-model §7)
+  status         String?
+  appointmentDate DateTime?
+  startsAt       DateTime?
+  endsAt         DateTime?
+  smsSent        Boolean   @default(false)
+  note           String?
+  gcalId         String?
+
+  @@index([appointmentDate])
+  @@index([patientId])
+}
+
+// ─────────────────────────── prescriptions ───────────────────────────
+model Drug {
+  id           Int     @id @default(autoincrement())
+  manufacturer String?
+  brandName    String?
+  genericName  String?
+  strength     String?
+  dosageForm   String?
+
+  @@index([brandName(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([genericName(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+model Prescription {
+  id                          Int       @id @default(autoincrement())
+  patient                     Patient?  @relation(fields: [patientId], references: [id])
+  patientId                   Int?
+  dentist                     Doctor?   @relation(fields: [dentistId], references: [id])
+  dentistId                   Int?
+  rxDate                      DateTime?
+  complaints                  String?
+  medicalHistory              String?
+  drugHistory                 String?
+  previousDentalHistory       String?
+  findingsOnExamination       String?
+  provisionalDiagnosis        String?
+  differentialDiagnosis       String?
+  investigationAdvised        String?
+  investigationInterpretation String?
+  confirmatoryDiagnosis       String?
+  treatmentPlan               String?
+  procedurePerformed          String?
+  advise                      String?
+  followUpDate                DateTime?
+  followUpReason              String?
+  randomName                  String?
+  randomAge                   String?
+  randomSex                   String?
+  deletedAt                   DateTime?
+  deletedBy                   String?
+
+  drugs PrescriptionDrug[]
+}
+
+model PrescriptionDrug {
+  id             Int     @id @default(autoincrement())
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id])
+  prescriptionId Int
+  sortOrder      Int     @default(0)
+  drug           String?
+  dose           String? // Bengali dosing text
+  meal           String?
+  duration       String?
+}
+
+// reusable phrase library powering the fast Rx editor
+model RxSnippet {
+  id                          Int     @id @default(autoincrement())
+  complaints                  String?
+  medicalHistory              String?
+  previousDentalHistory       String?
+  diagnosis                   String?
+  investigationAdvised        String?
+  investigationInterpretation String?
+  treatment                   String?
+  adviseHeader                String?
+  advise                      String?
+  drugDoseSortOrder           Int?
+  drugDose                    String?
+  drugDurationSortOrder       Int?
+  drugDuration                String?
+  drugMealSortOrder           Int?
+  drugMeal                    String?
+  followUpReason              String?
+}
+
+model RxTemplate {
+  id                    Int       @id @default(autoincrement())
+  name                  String
+  complaints            String?
+  findingsOnExamination String?
+  provisionalDiagnosis  String?
+  differentialDiagnosis String?
+  investigationAdvised  String?
+  confirmatoryDiagnosis String?
+  treatmentPlan         String?
+  procedurePerformed    String?
+  advise                String?
+  followUpDay           Int?
+  followUpReason        String?
+  createdBy             String?
+  createdAt             DateTime?
+  editedBy              String?
+  editedAt              DateTime?
+
+  drugs RxTemplateDrug[]
+}
+
+model RxTemplateDrug {
+  id         Int    @id @default(autoincrement())
+  template   RxTemplate @relation(fields: [templateId], references: [id])
+  templateId Int
+  sortOrder  Int    @default(0)
+  drug       String?
+  dose       String?
+  meal       String?
+  duration   String?
+}
+
+// ─────────────────────── comms & config ───────────────────────
+model SmsTemplate {
+  id      Int     @id @default(autoincrement())
+  name    String
+  heading String?
+  body1   String?
+  body2   String?
+  body3   String?
+  body4   String?
+  body5   String?
+  body6   String?
+}
+
+model IntegrationSetting {
+  id                Int       @id @default(autoincrement())
+  name              String
+  accessToken       String?
+  accessTokenExpire DateTime?
+  refreshToken      String?
+  clientId          String?
+  clientSecret      String?
+  // NOTE: secrets to be moved to a vault; rotate the leaked SMS key.
+}
+
+model ClinicSetting {
+  id                     Int     @id @default(autoincrement())
+  defaultRxType          String?
+  bodyRxReportName       String?
+  fullRxReportName       String?
+  autoAddAppointment     Boolean @default(false)
+  autoCompleteAppointment Boolean @default(false)
+}
+
+model DocumentTemplate {
+  id       Int     @id @default(autoincrement())
+  docName  String
+  heading1 String?
+  heading2 String?
+  heading3 String?
+  heading4 String?
+  heading5 String?
+  heading6 String?
+  heading7 String?
+  heading8 String?
+  heading9 String?
+  footer   String?
+}
+
+model Lab {
+  id                 Int       @id @default(autoincrement())
+  name               String
+  address            String?
+  contactPerson      String?
+  contactNumber      String?
+  email              String?
+  specialization     String?
+  agreementStartDate DateTime?
+  paymentTerms       String?
+  isActive           Boolean   @default(true)
+  notes              String?
+}
+
+model Vendor {
+  id            Int     @id @default(autoincrement())
+  name          String
+  businessPhone String?
+  address       String?
+  website       String?
+  note          String?
+}
+
+// ─────────────────────── normalized lookups (from tbl_CommonInfo) ───────────────────────
+model Occupation {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+}
+
+model Relation {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+}
+
+model ConnectionRelation {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+}
+
+model AddressPreset {
+  id    Int    @id @default(autoincrement())
+  value String @unique
+}
+
+model ScheduleSlot {
+  id    Int    @id @default(autoincrement())
+  label String @unique
+}
+
+model CaseType {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+}
+
+model LabShade {
+  id   Int    @id @default(autoincrement())
+  code String @unique
+}
+
+model Unit {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+}
+
+model SalaryType {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+}
+
+model ProductCategory {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+}
+
+model ExpenseCategory {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+}
+
+// ─────────────────────── patient history & search (NEW) ───────────────────────
+model ClinicalNote {
+  id        Int      @id @default(autoincrement())
+  patient   Patient  @relation(fields: [patientId], references: [id])
+  patientId Int
+  authorId  Int?
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
+}
+
+model PatientHistoryVersion {
+  id        Int         @id @default(autoincrement())
+  patient   Patient     @relation(fields: [patientId], references: [id])
+  patientId Int
+  kind      HistoryKind
+  body      String?
+  validFrom DateTime    @default(now())
+  authorId  Int?
+
+  @@index([patientId, kind])
+}
+
+model ToothChartEntry {
+  id              Int      @id @default(autoincrement())
+  patient         Patient  @relation(fields: [patientId], references: [id])
+  patientId       Int
+  toothFdi        String // FDI two-digit notation e.g. "14", "48"
+  status          String?
+  treatmentLineId Int?
+  recordedAt      DateTime @default(now())
+
+  @@index([patientId])
+}
+
+model TreatmentLineTooth {
+  treatmentLine   TreatmentLine @relation(fields: [treatmentLineId], references: [id])
+  treatmentLineId Int
+  toothFdi        String
+
+  @@id([treatmentLineId, toothFdi])
+}
+
+model Attachment {
+  id         Int      @id @default(autoincrement())
+  patient    Patient  @relation(fields: [patientId], references: [id])
+  patientId  Int
+  caseId     Int?
+  toothFdi   String?
+  storageKey String
+  kind       String? // photo | rvg | intraoral
+  createdAt  DateTime @default(now())
+
+  @@index([patientId])
+}
+
+model Recall {
+  id        Int      @id @default(autoincrement())
+  patient   Patient  @relation(fields: [patientId], references: [id])
+  patientId Int
+  dueDate   DateTime
+  reason    String?
+  status    String   @default("pending")
+
+  @@index([dueDate])
+}
+
+// denormalized timeline feed ("patient chart")
+model PatientEvent {
+  id         Int      @id @default(autoincrement())
+  patient    Patient  @relation(fields: [patientId], references: [id])
+  patientId  Int
+  eventType  String // appointment | treatment | payment | prescription | note | sms
+  refId      Int?
+  occurredAt DateTime
+  summary    String?
+
+  @@index([patientId, occurredAt])
+}
+
+model AuditLog {
+  id       Int      @id @default(autoincrement())
+  actor    User?    @relation(fields: [actorId], references: [id])
+  actorId  Int?
+  entity   String
+  entityId String?
+  action   String // create | update | delete
+  diff     Json?
+  at       DateTime @default(now())
+
+  @@index([entity, entityId])
+}
