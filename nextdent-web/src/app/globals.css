@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* Class-based dark mode: `dark:` applies when <html> has the `.dark` class
+   (set by the no-FOUC init script + ThemeToggle). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root { color-scheme: light; }
+:root.dark { color-scheme: dark; }
+
+body {
+  font-family: var(--font-geist-sans), system-ui, Arial, sans-serif;
+}
+
+/* thin scrollbars for dense clinical lists */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.dark * {
+  scrollbar-color: #334155 transparent;
+}
+
+/* Print: show only the prescription letterhead, drop all app chrome. */
+@media print {
+  header, .no-print { display: none !important; }
+  main { max-width: none !important; padding: 0 !important; }
+  body { background: #fff !important; }
+  .print-area { box-shadow: none !important; border: 0 !important; margin: 0 !important; max-width: 100% !important; }
+}
+
+/* Smooth light/dark switch — enabled only while `.theme-transition` is on <html>
+   (added briefly by the toggle), so colors animate on switch but not on load/hover. */
+@media (prefers-reduced-motion: no-preference) {
+  .theme-transition,
+  .theme-transition *,
+  .theme-transition *::before,
+  .theme-transition *::after {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease,
+      fill 0.3s ease, stroke 0.3s ease, box-shadow 0.3s ease !important;
+    transition-delay: 0s !important;
+  }
+}
