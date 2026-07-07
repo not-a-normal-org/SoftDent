@@ -531,6 +531,18 @@ model PatientEvent {
   @@index([patientId, occurredAt])
 }
 
+model Expense {
+  id          Int      @id @default(autoincrement())
+  date        DateTime
+  category    String?
+  description String?
+  amount      Int
+  createdById Int?
+  createdAt   DateTime @default(now())
+
+  @@index([date])
+}
+
 model AuditLog {
   id       Int      @id @default(autoincrement())
   actor    User?    @relation(fields: [actorId], references: [id])
