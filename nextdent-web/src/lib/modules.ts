@@ -29,7 +29,7 @@ export const MODULES: ModuleDef[] = [
   { key: "inventory", label: "Inventory", href: "/inventory", icon: "📦", desc: "Products, vendors, purchase orders", status: "soon", chip: "bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300", nav: false, card: true },
   { key: "labs", label: "Lab Work", href: "/labs", icon: "🔬", desc: "Crown/denture orders with external labs", status: "soon", chip: "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-300", nav: false, card: true },
   { key: "team", label: "Team", href: "/team", icon: "🧑‍💼", desc: "Staff, logins, roles & doctor profiles", status: "ready", chip: "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300", nav: true, card: true, roles: ["OWNER"] },
-  { key: "settings", label: "Settings", href: "/settings", icon: "⚙️", desc: "Catalogs, templates, clinic & SMS config", status: "soon", chip: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300", nav: false, card: true, roles: ["OWNER"] },
+  { key: "settings", label: "Settings", href: "/settings", icon: "⚙️", desc: "Treatment catalog, lookup lists, clinic & letterhead", status: "ready", chip: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300", nav: false, card: true, roles: ["OWNER"] },
 ];
 
 export const NAV_MODULES = MODULES.filter((m) => m.nav);
