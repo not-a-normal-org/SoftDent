@@ -8,7 +8,7 @@
 
 ## 1. What this application is
 
-A **dental clinic practice-management system** for a small multi-doctor practice in Dhaka, Bangladesh, used under at least two clinic brands (**NextDent** and **Dhaka Islamia Dental**). Built as a split Access app: a compiled `.accde` front-end over this encrypted `.accdb` back-end.
+A **dental clinic practice-management system** for a small multi-doctor practice in Dhaka, Bangladesh. The brand is **NextDent** (confirmed by the client). The legacy `tbl_PrintDoc` letterhead still carried an older label, "Dhaka Islamia Dental", which has been corrected to **NextDent** in the web app. Built as a split Access app: a compiled `.accde` front-end over this encrypted `.accdb` back-end.
 
 **Live data footprint (why the rebuild is worth it):**
 
@@ -215,7 +215,7 @@ Every scenario's shares **sum to exactly 100%**, which validates the reading. **
 1. **Case 1 vs Case 4** — what distinguishes two identically-weighted guest/guest scenarios?
 2. **Invoice & Rx print layouts** — sample **PDFs** of `rpt_Invoice` / `rpt_Prescription` / `rpt_Dh_*_Rx` for pixel parity. *(Both are built from `tbl_PrintDoc` letterhead data, but exact parity needs the samples.)*
 3. **Patient/invoice auto-numbering** format, if any (IDs look like plain autonumbers).
-4. **Which brands/clinics** are in active use (`NextDent` vs `Dhaka Islamia Dental`) and whether data should be per-clinic.
+4. ~~Which brand is in use~~ — **RESOLVED: NextDent.** (Open sub-question only if they run multiple clinics and want data partitioned per-clinic.)
 5. **SMS trigger rules** — exact events and timing (e.g. reminder = X days before). *(§7.1 strongly implies a status change fires the same-named template — confirm.)*
 6. **Roles & permissions** — the intended role matrix (legacy RBAC was stubbed/empty; the web app now ships OWNER/DOCTOR/RECEPTIONIST/ASSISTANT).
 

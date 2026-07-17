@@ -250,8 +250,10 @@ async function main() {
     fullRxReportName: s(r.FullRxReportName), autoAddAppointment: b(r.AutoAddAppointmentWhenAddingTreatmentDetails),
     autoCompleteAppointment: b(r.AutoCompleteAppointmentWhenAddingTreatmentDetails),
   })) });
+  // legacy letterhead carried an old label; the brand is NextDent
+  const brand = (v: string | null) => (v === "Dhaka Islamia Dental" ? "NextDent" : v);
   await prisma.documentTemplate.createMany({ data: rows("tbl_PrintDoc").map((r) => ({
-    id: n(r.PrintDocID)!, docName: s(r.DocName) ?? "(doc)", heading1: s(r.DocHeading1), heading2: s(r.DocHeading2),
+    id: n(r.PrintDocID)!, docName: s(r.DocName) ?? "(doc)", heading1: brand(s(r.DocHeading1)), heading2: s(r.DocHeading2),
     heading3: s(r.DocHeading3), heading4: s(r.DocHeading4), heading5: s(r.DocHeading5), heading6: s(r.DocHeading6),
     heading7: s(r.DocHeading7), heading8: s(r.DocHeading8), heading9: s(r.DocHeading9), footer: s(r.DocFooter),
   })) });
