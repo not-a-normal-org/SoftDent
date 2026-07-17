@@ -11,6 +11,7 @@ export type StaffFormState = { error?: string };
 const ROLES: Role[] = ["OWNER", "DOCTOR", "RECEPTIONIST", "ASSISTANT"];
 const s = (fd: FormData, k: string) => { const v = String(fd.get(k) ?? "").trim(); return v === "" ? null : v; };
 const i = (fd: FormData, k: string) => { const v = s(fd, k); const n = v ? parseInt(v, 10) : NaN; return Number.isFinite(n) ? n : null; };
+const f = (fd: FormData, k: string, dflt: number) => { const v = s(fd, k); const n = v ? parseFloat(v) : NaN; return Number.isFinite(n) ? n : dflt; };
 const b = (fd: FormData, k: string) => fd.get(k) === "on" || fd.get(k) === "1";
 
 export async function saveStaff(_prev: StaffFormState, fd: FormData): Promise<StaffFormState> {
@@ -54,12 +55,18 @@ export async function saveStaff(_prev: StaffFormState, fd: FormData): Promise<St
       });
     }
 
-    // doctor profile
+    // doctor profile + revenue contract
     if (isDoctor) {
+      const contract = {
+        degree: s(fd, "degree"), designation1: s(fd, "designation"), regNo: s(fd, "regNo"),
+        consultantSharePct: f(fd, "consultantSharePct", 20),
+        operatorSharePct: f(fd, "operatorSharePct", 40),
+        deductLabBeforeSplit: b(fd, "deductLabBeforeSplit"),
+      };
       await prisma.doctor.upsert({
         where: { personId },
-        update: { degree: s(fd, "degree"), designation1: s(fd, "designation"), regNo: s(fd, "regNo") },
-        create: { personId, isOwner: false, activeStatus: "Active", degree: s(fd, "degree"), designation1: s(fd, "designation"), regNo: s(fd, "regNo") },
+        update: contract,
+        create: { personId, isOwner: false, activeStatus: "Active", ...contract },
       });
     }
 

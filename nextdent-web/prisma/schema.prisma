@@ -60,6 +60,20 @@ model User {
 
   auditLogs AuditLog[]
   sessions  Session[]
+  calendar  CalendarConnection?
+}
+
+// Per-user Google Calendar connection (each staff member links their own Google account).
+model CalendarConnection {
+  id           Int      @id @default(autoincrement())
+  user         User     @relation(fields: [userId], references: [id])
+  userId       Int      @unique
+  googleEmail  String?
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  calendarId   String?  @default("primary")
+  createdAt    DateTime @default(now())
 }
 
 model Session {
@@ -88,7 +102,11 @@ model Doctor {
   regNo                 String?
   activeStatus          String?
   labBillReductionMethod String?
-  revenueShare          Json? // owner/guest/OT/chamber % per case type — confirm formula (data-model §4.3)
+  revenueShare          Json? // legacy owner/guest/OT/chamber % matrix (data-model §7.2)
+  // Per-contract revenue split (admin-configurable). Chamber/clinic gets the remainder.
+  consultantSharePct    Float   @default(20) // this doctor's cut when they are the consultant
+  operatorSharePct      Float   @default(40) // this doctor's cut when they operate (OT)
+  deductLabBeforeSplit  Boolean @default(true)
   note                  String?
 
   patients          Patient[]      @relation("ConsultantDoctor")
@@ -355,6 +373,11 @@ model ClinicSetting {
   fullRxReportName       String?
   autoAddAppointment     Boolean @default(false)
   autoCompleteAppointment Boolean @default(false)
+  // Configurable schedule (0=Sun … 6=Sat). Default mirrors the legacy "Sat–Wed" hours.
+  workingDays            Int[]   @default([6, 0, 1, 2, 3])
+  openTime               String  @default("15:00")
+  closeTime              String  @default("19:00")
+  slotMinutes            Int     @default(30)
 }
 
 model DocumentTemplate {

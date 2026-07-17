@@ -22,6 +22,7 @@ export default async function EditAppointmentPage({ params }: { params: Promise<
         initialPatient={appt.patient ? { id: appt.patient.id, name: appt.patient.fullName } : null}
         doctors={data.doctors}
         units={data.units}
+        schedule={data.schedule}
       />
     </div>
   );

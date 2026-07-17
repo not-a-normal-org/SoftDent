@@ -21,6 +21,7 @@ export default async function NewAppointmentPage({ searchParams }: { searchParam
       <AppointmentForm
         doctors={data.doctors}
         units={data.units}
+        schedule={data.schedule}
         defaultDate={date}
         initialPatient={patient ? { id: patient.id, name: patient.fullName } : null}
       />

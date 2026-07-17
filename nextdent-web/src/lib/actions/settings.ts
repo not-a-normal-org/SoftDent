@@ -63,10 +63,16 @@ export async function saveClinicConfig(_prev: ClinicFormState, fd: FormData): Pr
   const user = await requireRole("OWNER");
   try {
     const existing = await prisma.clinicSetting.findFirst();
+    const workingDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => fd.get(`day-${d}`) === "on");
+    const slot = parseInt(s(fd, "slotMinutes") ?? "30", 10);
     const data = {
       defaultRxType: s(fd, "defaultRxType"),
       autoAddAppointment: b(fd, "autoAddAppointment"),
       autoCompleteAppointment: b(fd, "autoCompleteAppointment"),
+      workingDays,
+      openTime: s(fd, "openTime") ?? "15:00",
+      closeTime: s(fd, "closeTime") ?? "19:00",
+      slotMinutes: Number.isFinite(slot) && slot > 0 ? slot : 30,
     };
     if (existing) await prisma.clinicSetting.update({ where: { id: existing.id }, data });
     else await prisma.clinicSetting.create({ data });

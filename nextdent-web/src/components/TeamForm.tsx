@@ -7,7 +7,7 @@ import { saveStaff, type StaffFormState } from "@/lib/actions/team";
 type Staff = {
   id: number; fullName: string; nickName: string | null; primaryPhone: string | null; email: string | null; activeStatus: boolean;
   user: { username: string; role: string; activeStatus: boolean } | null;
-  doctor: { degree: string | null; designation1: string | null; regNo: string | null } | null;
+  doctor: { degree: string | null; designation1: string | null; regNo: string | null; consultantSharePct: number; operatorSharePct: number; deductLabBeforeSplit: boolean } | null;
 };
 
 const ROLES = ["OWNER", "DOCTOR", "RECEPTIONIST", "ASSISTANT"];
@@ -65,14 +65,29 @@ export default function TeamForm({ staff }: { staff?: Staff }) {
           <input type="checkbox" name="isDoctor" checked={isDoctor} onChange={(e) => setIsDoctor(e.target.checked)} /> Is a doctor (for Rx letterhead)
         </label>
         {isDoctor && (
-          <div className="mt-3 grid gap-4 sm:grid-cols-3">
-            <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Degree</span>
-              <input name="degree" defaultValue={staff?.doctor?.degree ?? ""} className={inputCls} /></label>
-            <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Designation</span>
-              <input name="designation" defaultValue={staff?.doctor?.designation1 ?? ""} className={inputCls} /></label>
-            <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">BMDC Reg No</span>
-              <input name="regNo" defaultValue={staff?.doctor?.regNo ?? ""} className={inputCls} /></label>
-          </div>
+          <>
+            <div className="mt-3 grid gap-4 sm:grid-cols-3">
+              <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Degree</span>
+                <input name="degree" defaultValue={staff?.doctor?.degree ?? ""} className={inputCls} /></label>
+              <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Designation</span>
+                <input name="designation" defaultValue={staff?.doctor?.designation1 ?? ""} className={inputCls} /></label>
+              <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">BMDC Reg No</span>
+                <input name="regNo" defaultValue={staff?.doctor?.regNo ?? ""} className={inputCls} /></label>
+            </div>
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Revenue contract</div>
+              <p className="mt-0.5 text-xs text-slate-400">Their cut of a treatment; the clinic (chamber) keeps the remainder.</p>
+              <div className="mt-2 grid gap-4 sm:grid-cols-3">
+                <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Consultant share %</span>
+                  <input type="number" step="0.5" min="0" max="100" name="consultantSharePct" defaultValue={staff?.doctor?.consultantSharePct ?? 20} className={inputCls} /></label>
+                <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Operator share %</span>
+                  <input type="number" step="0.5" min="0" max="100" name="operatorSharePct" defaultValue={staff?.doctor?.operatorSharePct ?? 40} className={inputCls} /></label>
+                <label className="flex items-center gap-2 pt-7 text-sm text-slate-700 dark:text-slate-300">
+                  <input type="checkbox" name="deductLabBeforeSplit" defaultChecked={staff?.doctor?.deductLabBeforeSplit ?? true} /> Deduct lab cost first
+                </label>
+              </div>
+            </div>
+          </>
         )}
       </section>
 

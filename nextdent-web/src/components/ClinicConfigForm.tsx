@@ -3,8 +3,13 @@
 import { useActionState } from "react";
 import { saveClinicConfig, type ClinicFormState } from "@/lib/actions/settings";
 
-type Settings = { defaultRxType: string | null; autoAddAppointment: boolean; autoCompleteAppointment: boolean } | null;
+type Settings = {
+  defaultRxType: string | null; autoAddAppointment: boolean; autoCompleteAppointment: boolean;
+  workingDays: number[]; openTime: string; closeTime: string; slotMinutes: number;
+} | null;
 type Doc = { heading1: string | null; heading8: string | null; heading9: string | null; footer: string | null } | null;
+
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const initial: ClinicFormState = {};
 const inputCls =
@@ -29,6 +34,32 @@ export default function ClinicConfigForm({ settings, rxDoc }: { settings: Settin
           <label className="flex items-center gap-2 pt-7 text-sm text-slate-700 dark:text-slate-300">
             <input type="checkbox" name="autoCompleteAppointment" defaultChecked={settings?.autoCompleteAppointment ?? false} /> Auto-complete it
           </label>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Schedule</h2>
+        <p className="mt-0.5 text-xs text-slate-400">Working days and hours drive the appointment time slots.</p>
+        <div className="mt-3 space-y-4">
+          <div>
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Working days</span>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {DAYS.map((d, idx) => (
+                <label key={idx} className="cursor-pointer">
+                  <input type="checkbox" name={`day-${idx}`} defaultChecked={settings?.workingDays?.includes(idx) ?? [6, 0, 1, 2, 3].includes(idx)} className="peer sr-only" />
+                  <span className="inline-block rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 peer-checked:border-teal-500 peer-checked:bg-teal-50 peer-checked:text-teal-700 dark:border-slate-700 dark:text-slate-300 dark:peer-checked:border-teal-500 dark:peer-checked:bg-teal-500/15 dark:peer-checked:text-teal-300">{d}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Opens</span>
+              <input type="time" name="openTime" defaultValue={settings?.openTime ?? "15:00"} className={inputCls} /></label>
+            <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Closes</span>
+              <input type="time" name="closeTime" defaultValue={settings?.closeTime ?? "19:00"} className={inputCls} /></label>
+            <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Slot length (min)</span>
+              <input type="number" name="slotMinutes" min="5" step="5" defaultValue={settings?.slotMinutes ?? 30} className={inputCls} /></label>
+          </div>
         </div>
       </section>
 

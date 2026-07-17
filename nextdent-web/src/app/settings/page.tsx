@@ -4,7 +4,8 @@ import { requireRole } from "@/lib/auth";
 const CARDS = [
   { href: "/settings/treatments", icon: "🦷", title: "Treatment catalog", desc: "Procedures & default prices used across billing" },
   { href: "/settings/lists", icon: "📋", title: "Lookup lists", desc: "Occupations, relations, chairs, shades, categories…" },
-  { href: "/settings/clinic", icon: "🏥", title: "Clinic & letterhead", desc: "Rx defaults, automation toggles, prescription header/footer" },
+  { href: "/settings/clinic", icon: "🏥", title: "Clinic & letterhead", desc: "Schedule, Rx defaults, automation, prescription header/footer" },
+  { href: "/settings/calendar", icon: "📆", title: "Google Calendar", desc: "Connect a Google account to sync appointments" },
 ];
 
 export default async function SettingsPage() {

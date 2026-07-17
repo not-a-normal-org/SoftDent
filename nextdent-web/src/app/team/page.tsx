@@ -22,7 +22,10 @@ export default async function TeamPage() {
           <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Team</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{staff.length} people · manage logins, roles & doctor profiles</p>
         </div>
-        <Link href="/team/new" className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-teal-700">+ Add staff</Link>
+        <div className="flex items-center gap-2">
+          <Link href="/team/payouts" className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Payouts</Link>
+          <Link href="/team/new" className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-teal-700">+ Add staff</Link>
+        </div>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">

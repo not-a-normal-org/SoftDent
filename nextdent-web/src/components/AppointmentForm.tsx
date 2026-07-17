@@ -22,18 +22,34 @@ const initial: ApptFormState = {};
 const inputCls =
   "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
 
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
 export default function AppointmentForm({
-  appt, initialPatient, doctors, units, defaultDate,
+  appt, initialPatient, doctors, units, defaultDate, schedule,
 }: {
   appt?: ApptLike;
   initialPatient?: { id: number; name: string } | null;
   doctors: { id: number; name: string }[];
   units: string[];
   defaultDate?: string;
+  schedule?: { workingDays: number[]; slotMinutes: number; slots: string[] };
 }) {
   const [state, action, pending] = useActionState(saveAppointment, initial);
   const [patient, setPatient] = useState<{ id: number; name: string } | null>(initialPatient ?? null);
   const editing = !!appt;
+
+  const slots = schedule?.slots ?? [];
+  const [date, setDate] = useState<string>(toDateInput(appt?.appointmentDate) || defaultDate || toDateInput(new Date()));
+  const [start, setStart] = useState<string>(toTimeInput(appt?.startsAt) || slots[0] || "");
+  // derive end = start + slot length
+  const end = (() => {
+    if (!start) return toTimeInput(appt?.endsAt);
+    const [h, m] = start.split(":").map(Number);
+    const t = h * 60 + m + (schedule?.slotMinutes ?? 30);
+    return `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+  })();
+  const dow = date ? new Date(`${date}T00:00`).getDay() : -1;
+  const closedDay = schedule && dow >= 0 && !schedule.workingDays.includes(dow);
 
   return (
     <form action={action} className="space-y-6">
@@ -72,7 +88,8 @@ export default function AppointmentForm({
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Date <span className="text-rose-500">*</span></span>
-            <input type="date" name="appointmentDate" required defaultValue={toDateInput(appt?.appointmentDate) || defaultDate || toDateInput(new Date())} className={inputCls} />
+            <input type="date" name="appointmentDate" required value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+            {closedDay && <span className="mt-1 block text-xs text-amber-600 dark:text-amber-400">⚠ The clinic is normally closed on {DAY_NAMES[dow]}.</span>}
           </label>
 
           <label className="block">
@@ -84,12 +101,20 @@ export default function AppointmentForm({
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Start time</span>
-            <input type="time" name="startTime" defaultValue={toTimeInput(appt?.startsAt)} className={inputCls} />
+            {slots.length > 0 ? (
+              <select name="startTime" value={start} onChange={(e) => setStart(e.target.value)} className={inputCls}>
+                {/* keep an existing off-grid time selectable */}
+                {start && !slots.includes(start) && <option value={start}>{start}</option>}
+                {slots.map((sl) => <option key={sl} value={sl}>{sl}</option>)}
+              </select>
+            ) : (
+              <input type="time" name="startTime" value={start} onChange={(e) => setStart(e.target.value)} className={inputCls} />
+            )}
           </label>
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">End time</span>
-            <input type="time" name="endTime" defaultValue={toTimeInput(appt?.endsAt)} className={inputCls} />
+            <input type="time" name="endTime" value={end} readOnly className={`${inputCls} bg-slate-50 dark:bg-slate-800/70`} />
           </label>
 
           <label className="block sm:col-span-2">
