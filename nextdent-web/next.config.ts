@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // minimal, self-contained production image (only required runtime files)
+  output: "standalone",
 };
 
 export default nextConfig;
