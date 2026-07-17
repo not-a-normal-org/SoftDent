@@ -154,6 +154,9 @@ model Patient {
   recalls          Recall[]
   events           PatientEvent[]
   labOrders        LabOrder[]
+  connections      PatientConnection[] @relation("connFrom")
+  connectedTo      PatientConnection[] @relation("connTo")
+  healthRecords    HealthRecord[]
 
   @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([nickName(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -527,6 +530,36 @@ model ExpenseCategory {
 }
 
 // ─────────────────────── patient history & search (NEW) ───────────────────────
+model PatientConnection {
+  id               Int      @id @default(autoincrement())
+  patient          Patient  @relation("connFrom", fields: [patientId], references: [id])
+  patientId        Int
+  relatedPatient   Patient? @relation("connTo", fields: [relatedPatientId], references: [id])
+  relatedPatientId Int?
+  relatedName      String? // used when the relative isn't a registered patient
+  relation         String? // Father, Spouse, Child…
+  createdAt        DateTime @default(now())
+
+  @@index([patientId])
+}
+
+model HealthRecord {
+  id            Int      @id @default(autoincrement())
+  patient       Patient  @relation(fields: [patientId], references: [id])
+  patientId     Int
+  recordedAt    DateTime @default(now())
+  bloodPressure String?
+  pulse         String?
+  weightKg      String?
+  bloodGroup    String?
+  allergies     String?
+  conditions    String?
+  note          String?
+  recordedById  Int?
+
+  @@index([patientId])
+}
+
 model ClinicalNote {
   id        Int      @id @default(autoincrement())
   patient   Patient  @relation(fields: [patientId], references: [id])

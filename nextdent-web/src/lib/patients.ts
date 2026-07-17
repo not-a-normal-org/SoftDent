@@ -60,7 +60,7 @@ export async function getPatientProfile(id: number) {
   });
   if (!patient) return null;
 
-  const [cases, prescriptions, events, agg] = await Promise.all([
+  const [cases, prescriptions, events, agg, connections, healthRecords] = await Promise.all([
     prisma.treatmentCase.findMany({
       where: { patientId: id },
       orderBy: { id: "desc" },
@@ -79,6 +79,12 @@ export async function getPatientProfile(id: number) {
       where: { case: { patientId: id } },
       _sum: { afterDiscountAmount: true, amountPaid: true },
     }),
+    prisma.patientConnection.findMany({
+      where: { patientId: id },
+      include: { relatedPatient: { select: { id: true, fullName: true } } },
+      orderBy: { id: "desc" },
+    }),
+    prisma.healthRecord.findMany({ where: { patientId: id }, orderBy: { recordedAt: "desc" } }),
   ]);
 
   const billed = agg._sum.afterDiscountAmount ?? 0;
@@ -100,6 +106,8 @@ export async function getPatientProfile(id: number) {
     prescriptions,
     events,
     teeth,
+    connections,
+    healthRecords,
     billing: { billed, paid, due: billed - paid },
   };
 }

@@ -79,3 +79,8 @@ export async function getRxEditorData() {
 export async function getRxLetterhead() {
   return prisma.documentTemplate.findFirst({ where: { docName: "Prescription" } });
 }
+
+export const listRxTemplates = () =>
+  prisma.rxTemplate.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { drugs: true } } } });
+export const getRxTemplateFull = (id: number) =>
+  prisma.rxTemplate.findUnique({ where: { id }, include: { drugs: { orderBy: { sortOrder: "asc" } } } });

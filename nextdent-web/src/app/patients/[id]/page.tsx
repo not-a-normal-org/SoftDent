@@ -4,6 +4,7 @@ import { getPatientProfile } from "@/lib/patients";
 import { taka, fmtDate, age, initials } from "@/lib/format";
 import DentalChart from "@/components/DentalChart";
 import Timeline from "@/components/Timeline";
+import { addConnection, deleteConnection, addHealthRecord, deleteHealthRecord } from "@/lib/actions/patient-extras";
 
 export default async function PatientProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,7 +14,8 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
   const data = await getPatientProfile(pid);
   if (!data) notFound();
 
-  const { patient: p, cases, prescriptions, events, teeth, billing } = data;
+  const { patient: p, cases, prescriptions, events, teeth, billing, connections, healthRecords } = data;
+  const vitalsInput = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
   const a = age(p.dob);
   const consultant = p.consultantDoctor?.person.fullName ?? null;
 
@@ -177,6 +179,66 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
               </div>
             </section>
           )}
+
+          {/* health records / vitals */}
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Health records</h2>
+            {healthRecords.length > 0 && (
+              <ul className="mb-3 space-y-2">
+                {healthRecords.map((h) => (
+                  <li key={h.id} className="rounded-lg border border-slate-200 p-2.5 text-sm dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400">{fmtDate(h.recordedAt)}</span>
+                      <form action={deleteHealthRecord.bind(null, h.id, p.id)}><button className="text-xs text-slate-300 hover:text-rose-600">✕</button></form>
+                    </div>
+                    <div className="mt-0.5 text-slate-700 dark:text-slate-300">
+                      {[h.bloodPressure && `BP ${h.bloodPressure}`, h.pulse && `Pulse ${h.pulse}`, h.weightKg && `${h.weightKg}kg`, h.bloodGroup && `Grp ${h.bloodGroup}`].filter(Boolean).join(" · ") || "—"}
+                    </div>
+                    {(h.allergies || h.conditions || h.note) && (
+                      <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{[h.allergies && `Allergies: ${h.allergies}`, h.conditions && `Conditions: ${h.conditions}`, h.note].filter(Boolean).join(" · ")}</div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form action={addHealthRecord.bind(null, p.id)} className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <input name="bloodPressure" placeholder="BP e.g. 120/80" className={vitalsInput} />
+                <input name="pulse" placeholder="Pulse" className={vitalsInput} />
+                <input name="weightKg" placeholder="Weight (kg)" className={vitalsInput} />
+                <input name="bloodGroup" placeholder="Blood group" className={vitalsInput} />
+              </div>
+              <input name="allergies" placeholder="Allergies" className={vitalsInput} />
+              <input name="conditions" placeholder="Conditions" className={vitalsInput} />
+              <button className="w-full rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700">+ Add record</button>
+            </form>
+          </section>
+
+          {/* family connections */}
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Family &amp; connections</h2>
+            {connections.length > 0 && (
+              <ul className="mb-3 space-y-1.5">
+                {connections.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between text-sm">
+                    <span className="text-slate-700 dark:text-slate-300">
+                      {c.relatedPatient
+                        ? <Link href={`/patients/${c.relatedPatient.id}`} className="hover:text-teal-700 dark:hover:text-teal-400">{c.relatedPatient.fullName}</Link>
+                        : c.relatedName}
+                      {c.relation && <span className="text-slate-400"> · {c.relation}</span>}
+                    </span>
+                    <form action={deleteConnection.bind(null, c.id, p.id)}><button className="text-xs text-slate-300 hover:text-rose-600">✕</button></form>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form action={addConnection.bind(null, p.id)} className="flex gap-2">
+              <input name="relatedName" placeholder="Name" className={`flex-1 ${vitalsInput}`} />
+              <input name="relation" placeholder="Relation" className={`w-28 ${vitalsInput}`} />
+              <button className="rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700">Add</button>
+            </form>
+          </section>
+
           <Timeline events={events} />
         </div>
       </div>
