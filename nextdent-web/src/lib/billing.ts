@@ -24,6 +24,20 @@ export function getLine(id: number) {
   return prisma.treatmentLine.findUnique({ where: { id }, include: { case: true } });
 }
 
+/** Clinic letterhead for the printed invoice (legacy tbl_PrintDoc → "Invoice"). */
+export const getInvoiceDoc = () => prisma.documentTemplate.findFirst({ where: { docName: "Invoice" } });
+
+/** A case with everything needed to render its invoice. */
+export function getCaseForInvoice(id: number) {
+  return prisma.treatmentCase.findUnique({
+    where: { id },
+    include: {
+      patient: { select: { id: true, fullName: true, primaryPhone: true, address: true } },
+      lines: { orderBy: [{ treatmentDate: "asc" }, { id: "asc" }], include: { operatingDoctor: { include: { person: true } } } },
+    },
+  });
+}
+
 export async function getBillingEditorData() {
   const [treatments, doctors] = await Promise.all([
     prisma.treatment.findMany({ orderBy: { name: "asc" } }),
