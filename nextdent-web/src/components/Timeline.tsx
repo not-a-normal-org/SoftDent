@@ -13,6 +13,7 @@ const STYLE: Record<string, { dot: string; icon: string; label: string }> = {
   payment:      { dot: "bg-emerald-500",icon: "💵", label: "Payment" },
   prescription: { dot: "bg-violet-500", icon: "℞",  label: "Prescription" },
   note:         { dot: "bg-amber-500",  icon: "📝", label: "Note" },
+  lab:          { dot: "bg-cyan-500",   icon: "🔬", label: "Lab work" },
   sms:          { dot: "bg-slate-400",  icon: "✉️", label: "SMS" },
 };
 

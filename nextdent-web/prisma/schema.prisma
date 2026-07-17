@@ -135,6 +135,7 @@ model Patient {
   attachments      Attachment[]
   recalls          Recall[]
   events           PatientEvent[]
+  labOrders        LabOrder[]
 
   @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([nickName(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -383,6 +384,29 @@ model Lab {
   paymentTerms       String?
   isActive           Boolean   @default(true)
   notes              String?
+
+  orders LabOrder[]
+}
+
+model LabOrder {
+  id         Int       @id @default(autoincrement())
+  patient    Patient   @relation(fields: [patientId], references: [id])
+  patientId  Int
+  lab        Lab       @relation(fields: [labId], references: [id])
+  labId      Int
+  workType   String? // Crown, Bridge, Denture…
+  toothFdi   String?
+  shade      String? // VITA shade from the LabShade lookup
+  sentAt     DateTime?
+  expectedAt DateTime?
+  receivedAt DateTime?
+  status     String    @default("SENT")
+  cost       Int       @default(0)
+  note       String?
+  createdAt  DateTime  @default(now())
+
+  @@index([patientId])
+  @@index([status])
 }
 
 model Vendor {
