@@ -77,7 +77,7 @@ export default function AppointmentForm({
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Status</span>
-            <select name="status" defaultValue={appt?.status ?? "SCHEDULED"} className={inputCls}>
+            <select name="status" defaultValue={appt?.status ?? "PENDING"} className={inputCls}>
               {STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
           </label>

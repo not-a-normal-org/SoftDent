@@ -5,6 +5,7 @@
  * Loose/orphan foreign keys (predicted in data-model.md §6) are filtered and reported.
  */
 import { PrismaClient } from "@prisma/client";
+import { LEGACY_STATUS_BY_CODE } from "../src/lib/appointment-constants";
 import { parse } from "csv-parse/sync";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -177,7 +178,10 @@ async function main() {
   await prisma.appointment.createMany({ data: apptRows.map((r) => ({
     id: n(r.AppointmentID)!, patientId: n(r.PatientID)!,
     doctorId: doctorIds.has(n(r.DrID)!) ? n(r.DrID) : null,
-    allocatedUnit: s(r.AllocatedUnit), statusCode: n(r.AppointmentStatusID),
+    allocatedUnit: s(r.AllocatedUnit),
+    statusCode: n(r.AppointmentStatusID),
+    // legacy AppointmentStatusID is an FK into tbl_Sms — decode it to our status vocabulary
+    status: LEGACY_STATUS_BY_CODE[n(r.AppointmentStatusID) ?? -1] ?? null,
     appointmentDate: d(r.AppointmentDate),
     startsAt: combine(r.AppointmentDate, r.AppointmentStartTime),
     endsAt: combine(r.AppointmentDate, r.AppointmentEndTime),

@@ -172,15 +172,52 @@ This one 95-row table is a bag of **independent, non-aligned columns**; each col
 
 ---
 
-## 7. Open questions for the client / needs the front-end VBA
-These can't be read from data alone (logic lives in the missing `.accdb`/VBA):
-1. **Appointment status codes** — the meaning of `AppointmentStatusID` 12/14/etc.
-2. **Doctor revenue-split formula** — exact math and which % applies when.
-3. **Invoice & Rx print layouts** — pixel layout of `rpt_Invoice`, `rpt_Prescription`, `rpt_Dh_*_Rx` (get PDF samples).
-4. **Patient/invoice auto-numbering** format, if any (IDs look like plain autonumbers).
-5. **Roles & permissions** intended (RBAC was stubbed but empty).
-6. **Which brands/clinics** are in active use and whether data is per-clinic.
-7. **SMS trigger rules** — exact events and timing (e.g. reminder = X days before).
+## 7. Open questions — resolved by forensics vs. still needing the client
+
+### 7.1 ✅ RESOLVED — `AppointmentStatusID` decoded
+**`tbl_Appointments.AppointmentStatusID` is a foreign key into `tbl_Sms.SmsID`.** The old app used the SMS-template table as its appointment status list, so setting a status could fire the matching SMS (hence the `IsAppointSmsSend` / `AppointmentSmsLog` columns).
+
+| SmsID | Status | | SmsID | Status |
+|---:|---|---|---:|---|
+| 6 | Confirmed | | 11 | Late |
+| 7 | Reminded | | 12 | **Overdue** |
+| 8 | Rescheduled | | 13 | Pending Confirmation |
+| 9 | Cancelled | | 14 | **Completed** |
+| 10 | Waitlisted | | 1–5 | *(payment/welcome templates — not statuses)* |
+
+**Evidence:**
+1. `tbl_Sms` rows 6–14 are exactly an appointment-lifecycle vocabulary; rows 1–5 are payment/welcome templates.
+2. The only two codes present in the data decode correctly against their dates — **12 → Overdue** (two Jan-2026 appointments never completed) and **14 → Completed** (a Mar-2026 appointment).
+3. The status words appear **zero times** in the compiled `.accde` (only "Overdue" shows up, from `frm_AppointmentOverdue`) — i.e. they were **bound from a table, not hardcoded** — and `tbl_Sms` is the only table containing that vocabulary.
+
+→ Implemented in the web app (`lib/appointment-constants.ts`) with a `legacyCode` mapping; the ETL and a backfill decode `statusCode` → status. **Confidence: high — worth a one-line client confirmation.**
+
+### 7.2 ✅ RESOLVED — doctor revenue-split reconstructed
+Every scenario's shares **sum to exactly 100%**, which validates the reading. **Chamber (clinic) always takes 40%; the operating (OT) doctor always takes 40%; the consultant tier splits the remaining 20%.**
+
+| Scenario | Consultant | Operates | Consultant | Appointing owner | OT doctor | Chamber |
+|---|---|---|---:|---:|---:|---:|
+| **Base** | Owner | Owner | 20% *(owner)* | — | 40% *(owner)* | 40% |
+| **Case 1** | Guest | Guest | 10% | 10% | 40% | 40% |
+| **Case 2** | Guest | **Owner** | 20% | — | 40% *(owner)* | 40% |
+| **Case 3** | **Owner** | Guest | 20% *(owner)* | — | 40% *(guest)* | 40% |
+| **Case 4** | Guest | Guest | 10% | 10% | 40% | 40% |
+
+- Roles come from **`Patient.PatientConsultantDrID`** (consultant) and **`TreatmentLine.OTDrID`** (operator).
+- **`LabBillReductionMethods = "Reduce Before Split"`** ⇒ lab cost is deducted **before** applying percentages:
+  `splitBase = afterDiscountAmount − labCost`, then `share = splitBase × percent`.
+- ⚠️ **Case 1 and Case 4 are numerically identical** (10/10/40/40), so whatever distinguishes them is **not** derivable from the data — needs the client.
+- ⚠️ Legacy typo to watch in the source columns: `Case1Gust OTDrPercent` vs `Case3/4Guest OTDrPercent`.
+
+→ **Deliberately not implemented yet.** This formula moves money, so it should be confirmed before it drives payouts. It's also moot today: the practice has only **one doctor (the owner)**, so every real row is the Base case (owner 60% / chamber 40%).
+
+### 7.3 ❓ Still needs the client (not derivable from the data)
+1. **Case 1 vs Case 4** — what distinguishes two identically-weighted guest/guest scenarios?
+2. **Invoice & Rx print layouts** — sample **PDFs** of `rpt_Invoice` / `rpt_Prescription` / `rpt_Dh_*_Rx` for pixel parity. *(Both are built from `tbl_PrintDoc` letterhead data, but exact parity needs the samples.)*
+3. **Patient/invoice auto-numbering** format, if any (IDs look like plain autonumbers).
+4. **Which brands/clinics** are in active use (`NextDent` vs `Dhaka Islamia Dental`) and whether data should be per-clinic.
+5. **SMS trigger rules** — exact events and timing (e.g. reminder = X days before). *(§7.1 strongly implies a status change fires the same-named template — confirm.)*
+6. **Roles & permissions** — the intended role matrix (legacy RBAC was stubbed/empty; the web app now ships OWNER/DOCTOR/RECEPTIONIST/ASSISTANT).
 
 ---
 

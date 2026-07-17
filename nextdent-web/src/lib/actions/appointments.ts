@@ -39,7 +39,7 @@ export async function saveAppointment(_prev: ApptFormState, fd: FormData): Promi
     appointmentDate: combine(dateStr, null),
     startsAt,
     endsAt: combine(dateStr, str(fd, "endTime")),
-    status: str(fd, "status") ?? "SCHEDULED",
+    status: str(fd, "status") ?? "PENDING",
     note: str(fd, "note"),
   };
 
