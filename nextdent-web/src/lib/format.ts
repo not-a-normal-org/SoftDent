@@ -6,10 +6,31 @@ export const taka = (n: number | null | undefined) =>
 const D = (d: Date | string | null | undefined) =>
   d ? (typeof d === "string" ? new Date(d) : d) : null;
 
+/**
+ * Every date on screen is clinic-local, never viewer-local or server-local.
+ *
+ * Without this, formatting depends on the host's timezone: Cloud Run runs UTC while
+ * the clinic is UTC+6, so the server rendered one time and the browser another — a
+ * 6-hour error on every appointment, and a React hydration mismatch on top. An
+ * appointment at 3pm is 3pm in Dhaka no matter who is looking at it.
+ */
+export const CLINIC_TZ = "Asia/Dhaka";
+
+/** Calendar parts of an instant *as seen in the clinic's timezone*. */
+const clinicParts = (x: Date) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: CLINIC_TZ,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(x);
+  const get = (t: string) => parts.find((v) => v.type === t)?.value ?? "";
+  return { y: get("year"), m: get("month"), d: get("day"), hh: get("hour"), mi: get("minute") };
+};
+
 export const fmtDate = (d: Date | string | null | undefined) => {
   const x = D(d);
   if (!x || isNaN(+x)) return "—";
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(x);
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: CLINIC_TZ }).format(x);
 };
 
 export const fmtDateTime = (d: Date | string | null | undefined) => {
@@ -17,6 +38,7 @@ export const fmtDateTime = (d: Date | string | null | undefined) => {
   if (!x || isNaN(+x)) return "—";
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+    timeZone: CLINIC_TZ, hourCycle: "h23",
   }).format(x);
 };
 
@@ -24,22 +46,22 @@ export const fmtDateTime = (d: Date | string | null | undefined) => {
 export const toDateInput = (d: Date | string | null | undefined) => {
   const x = D(d);
   if (!x || isNaN(+x)) return "";
-  const m = String(x.getMonth() + 1).padStart(2, "0");
-  const day = String(x.getDate()).padStart(2, "0");
-  return `${x.getFullYear()}-${m}-${day}`;
+  const { y, m, d: day } = clinicParts(x);
+  return `${y}-${m}-${day}`;
 };
 
 // Date → "HH:MM" for <input type="time"> default values
 export const toTimeInput = (d: Date | string | null | undefined) => {
   const x = D(d);
   if (!x || isNaN(+x)) return "";
-  return `${String(x.getHours()).padStart(2, "0")}:${String(x.getMinutes()).padStart(2, "0")}`;
+  const { hh, mi } = clinicParts(x);
+  return `${hh}:${mi}`;
 };
 
 export const fmtTime = (d: Date | string | null | undefined) => {
   const x = D(d);
   if (!x || isNaN(+x)) return "";
-  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(x);
+  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: CLINIC_TZ, hourCycle: "h23" }).format(x);
 };
 
 export const age = (dob: Date | string | null | undefined) => {

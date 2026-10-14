@@ -21,7 +21,7 @@ export default function DrugPicker({ onPick }: { onPick: (d: Drug) => void }) {
 
   useEffect(() => {
     const term = q.trim();
-    if (term.length < 2) { setHits([]); setLoading(false); return; }
+    if (term.length < 1) { setHits([]); setLoading(false); return; }
     setLoading(true);
     const t = setTimeout(async () => {
       abortRef.current?.abort();
@@ -55,6 +55,13 @@ export default function DrugPicker({ onPick }: { onPick: (d: Drug) => void }) {
     setQ("");
     setHits([]);
     setOpen(false);
+    // weights this drug for future searches; the editor must not wait on it
+    fetch("/api/drugs/use", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: d.id }),
+      keepalive: true,
+    }).catch(() => {});
   }
 
   function onKey(e: React.KeyboardEvent) {
@@ -82,7 +89,7 @@ export default function DrugPicker({ onPick }: { onPick: (d: Drug) => void }) {
         )}
       </div>
 
-      {open && q.trim().length >= 2 && (
+      {open && q.trim().length >= 1 && (
         <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
           {hits.length === 0 && !loading ? (
             <div className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">No drugs match “{q}”.</div>

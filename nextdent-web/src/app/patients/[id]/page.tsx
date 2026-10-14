@@ -3,8 +3,11 @@ import { notFound } from "next/navigation";
 import { getPatientProfile } from "@/lib/patients";
 import { taka, fmtDate, age, initials } from "@/lib/format";
 import DentalChart from "@/components/DentalChart";
+import PatientBilling from "@/components/PatientBilling";
+import PatientSms from "@/components/PatientSms";
 import Timeline from "@/components/Timeline";
 import { addConnection, deleteConnection, addHealthRecord, deleteHealthRecord } from "@/lib/actions/patient-extras";
+import { listSmsTemplates, recentSmsForPatient, normalisePhone, smsValuesForPatient } from "@/lib/sms";
 
 export default async function PatientProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,6 +16,12 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
 
   const data = await getPatientProfile(pid);
   if (!data) notFound();
+
+  const [smsTemplates, smsLog, sms] = await Promise.all([
+    listSmsTemplates(),
+    recentSmsForPatient(pid),
+    smsValuesForPatient(pid),
+  ]);
 
   const { patient: p, cases, prescriptions, events, teeth, billing, connections, healthRecords } = data;
   const vitalsInput = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
@@ -69,70 +78,34 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
             <div className="flex gap-3">
               <Stat label="Billed" value={taka(billing.billed)} tone="slate" />
               <Stat label="Paid" value={taka(billing.paid)} tone="emerald" />
-              <Stat label="Due" value={taka(billing.due)} tone={billing.due > 0 ? "rose" : "emerald"} />
+              {/* paid ahead of the billing shows as credit, not as a negative due */}
+              <Stat
+                label={billing.due < 0 ? "Credit" : "Due"}
+                value={taka(Math.abs(billing.due))}
+                tone={billing.due > 0 ? "rose" : "emerald"}
+              />
             </div>
           </div>
         </div>
       </section>
 
+      {/* full width — the billing table carries eight columns plus an entry row */}
+      <PatientBilling patientId={p.id} cases={cases} />
+
+      <PatientSms
+        patientId={p.id}
+        hasPhone={Boolean(normalisePhone(p.primaryPhone))}
+        phone={normalisePhone(p.primaryPhone)}
+        templates={smsTemplates}
+        values={sms.values}
+        booked={sms.booked}
+        log={smsLog}
+      />
+
       <div className="grid gap-6 lg:grid-cols-3">
         {/* main column */}
         <div className="space-y-6 lg:col-span-2">
           <DentalChart teeth={teeth} />
-
-          {/* treatment cases */}
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Treatment cases</h2>
-              <Link href={`/patients/${p.id}/cases/new`} className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-400">+ New case</Link>
-            </div>
-            {cases.length === 0 ? (
-              <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-400">No treatment cases recorded.</p>
-            ) : (
-              <div className="space-y-4">
-                {cases.map((c) => (
-                  <div key={c.id} className="rounded-xl border border-slate-200 dark:border-slate-800">
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5 dark:border-slate-800">
-                      <Link href={`/cases/${c.id}`} className="font-medium text-slate-800 hover:text-teal-700 dark:text-slate-200 dark:hover:text-teal-400">{c.name || `Case #${c.id}`}</Link>
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status={c.status} />
-                        <Link href={`/cases/${c.id}`} className="text-xs text-teal-700 hover:underline dark:text-teal-400">manage</Link>
-                      </div>
-                    </div>
-                    {c.lines.length > 0 && (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="text-left text-xs text-slate-400 dark:text-slate-500">
-                              <th className="px-4 py-2 font-medium">Date</th>
-                              <th className="px-4 py-2 font-medium">Procedure</th>
-                              <th className="px-4 py-2 text-right font-medium">Amount</th>
-                              <th className="px-4 py-2 text-right font-medium">Paid</th>
-                              <th className="px-4 py-2 text-right font-medium">Due</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {c.lines.map((l) => {
-                              const due = l.afterDiscountAmount - l.amountPaid;
-                              return (
-                                <tr key={l.id} className="border-t border-slate-50 dark:border-slate-800/60">
-                                  <td className="whitespace-nowrap px-4 py-2 text-slate-500 dark:text-slate-400">{fmtDate(l.treatmentDate)}</td>
-                                  <td className="px-4 py-2 text-slate-800 dark:text-slate-200">{l.treatmentName || "—"}</td>
-                                  <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{taka(l.afterDiscountAmount)}</td>
-                                  <td className="px-4 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{taka(l.amountPaid)}</td>
-                                  <td className={`px-4 py-2 text-right tabular-nums ${due > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-400 dark:text-slate-500"}`}>{taka(due)}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
 
           {/* prescriptions */}
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -269,13 +242,6 @@ function Stat({ label, value, tone }: { label: string; value: string; tone: "sla
   );
 }
 
-function StatusBadge({ status }: { status: string | null }) {
-  const s = (status ?? "").toLowerCase();
-  const cls = s === "completed" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
-    : s === "active" ? "bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300"
-    : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
-  return <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${cls}`}>{status || "—"}</span>;
-}
 
 function HistoryBlock({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;

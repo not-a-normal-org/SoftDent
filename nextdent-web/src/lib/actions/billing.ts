@@ -121,3 +121,102 @@ export async function recordPayment(lineId: number, fd: FormData) {
   revalidateBilling(line.case.id, line.case.patientId);
   redirect(`/cases/${line.case.id}`);
 }
+
+// ── inline billing on the patient profile ──
+// These mirror the actions above but return instead of redirecting, so adding a
+// case, a procedure or a payment never navigates the doctor off the patient page.
+export type InlineState = { error?: string; savedAt?: number };
+
+export async function addCaseInline(_prev: InlineState, fd: FormData): Promise<InlineState> {
+  const user = await requireUser();
+  const patientId = i(fd, "patientId");
+  if (!patientId) return { error: "Missing patient." };
+  const name = s(fd, "name");
+  if (!name) return { error: "Name the case first." };
+
+  try {
+    const c = await prisma.treatmentCase.create({
+      data: { patientId, name, notes: s(fd, "notes"), status: "Active" },
+    });
+    await prisma.auditLog.create({ data: { actorId: user.id, entity: "case", entityId: String(c.id), action: "create" } });
+    revalidateBilling(c.id, patientId);
+  } catch (e) {
+    console.error("addCaseInline failed", e);
+    return { error: "Could not create the case." };
+  }
+  return { savedAt: Date.now() };
+}
+
+export async function addLineInline(_prev: InlineState, fd: FormData): Promise<InlineState> {
+  const user = await requireUser();
+  const caseId = i(fd, "caseId");
+  if (!caseId) return { error: "Missing case." };
+  const c = await prisma.treatmentCase.findUnique({ where: { id: caseId }, select: { patientId: true } });
+  if (!c) return { error: "Case not found." };
+
+  const name = s(fd, "treatmentName");
+  if (!name) return { error: "Name the procedure." };
+  const total = i(fd, "totalAmount") ?? 0;
+  const discount = f(fd, "discountPercent");
+  const payable = afterDiscount(total, discount);
+  // Money that was handed over is recorded as handed over. It is deliberately NOT
+  // capped at the payable: a line can be worth ৳0 and still take ৳100 (an advance
+  // against work not yet priced), and silently dropping that was losing payments.
+  // Anything beyond the payable shows as credit against the line.
+  const paidNow = Math.max(0, i(fd, "paidNow") ?? 0);
+  const when = d(fd, "treatmentDate") ?? new Date();
+
+  try {
+    const line = await prisma.treatmentLine.create({
+      data: {
+        caseId, treatmentName: name, treatmentDate: when,
+        totalAmount: total, discountPercent: discount,
+        afterDiscountAmount: payable, amountPaid: paidNow,
+      },
+    });
+    await prisma.patientEvent.create({
+      data: { patientId: c.patientId, eventType: "treatment", refId: line.id, occurredAt: when,
+        summary: `${name} — ৳${payable}` },
+    });
+    if (paidNow > 0) {
+      await prisma.payment.create({ data: { treatmentLineId: line.id, amount: paidNow, paidAt: when } });
+      await prisma.patientEvent.create({
+        data: { patientId: c.patientId, eventType: "payment", refId: line.id, occurredAt: when, summary: `Payment ৳${paidNow}` },
+      });
+    }
+    await prisma.auditLog.create({ data: { actorId: user.id, entity: "line", entityId: String(line.id), action: "create" } });
+    revalidateBilling(caseId, c.patientId);
+  } catch (e) {
+    console.error("addLineInline failed", e);
+    return { error: "Could not add the procedure." };
+  }
+  return { savedAt: Date.now() };
+}
+
+export async function payLineInline(lineId: number, _prev: InlineState, fd: FormData): Promise<InlineState> {
+  const user = await requireUser();
+  const line = await prisma.treatmentLine.findUnique({
+    where: { id: lineId },
+    include: { case: { select: { id: true, patientId: true } } },
+  });
+  if (!line) return { error: "Line not found." };
+  const amount = i(fd, "amount") ?? 0;
+  if (amount <= 0) return { error: "Enter an amount." };
+  // No ceiling on the amount: a line may be worth ৳0 and still take a payment, and a
+  // patient may pay ahead. The excess is shown as credit rather than refused.
+
+  try {
+    const paidAt = d(fd, "paidAt") ?? new Date();
+    await prisma.payment.create({ data: { treatmentLineId: lineId, amount, method: s(fd, "method"), paidAt } });
+    await prisma.treatmentLine.update({ where: { id: lineId }, data: { amountPaid: { increment: amount } } });
+    await prisma.patientEvent.create({
+      data: { patientId: line.case.patientId, eventType: "payment", refId: lineId, occurredAt: paidAt, summary: `Payment ৳${amount}` },
+    });
+    await prisma.auditLog.create({ data: { actorId: user.id, entity: "payment", entityId: String(lineId), action: "create" } });
+    revalidateBilling(line.case.id, line.case.patientId);
+  } catch (e) {
+    console.error("payLineInline failed", e);
+    return { error: "Could not record the payment." };
+  }
+  return { savedAt: Date.now() };
+}

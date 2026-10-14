@@ -65,8 +65,16 @@ export async function saveClinicConfig(_prev: ClinicFormState, fd: FormData): Pr
     const existing = await prisma.clinicSetting.findFirst();
     const workingDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => fd.get(`day-${d}`) === "on");
     const slot = parseInt(s(fd, "slotMinutes") ?? "30", 10);
+    // clamped rather than trusted: these drive print padding, and a silly value
+    // would push the whole prescription off the page
+    const mm = (k: string, fallback: number) => {
+      const n = parseInt(s(fd, k) ?? "", 10);
+      return Number.isFinite(n) ? Math.min(150, Math.max(0, n)) : fallback;
+    };
     const data = {
       defaultRxType: s(fd, "defaultRxType"),
+      rxBodyTopMm: mm("rxBodyTopMm", 45),
+      rxBodyBottomMm: mm("rxBodyBottomMm", 20),
       autoAddAppointment: b(fd, "autoAddAppointment"),
       autoCompleteAppointment: b(fd, "autoCompleteAppointment"),
       workingDays,
@@ -78,7 +86,7 @@ export async function saveClinicConfig(_prev: ClinicFormState, fd: FormData): Pr
     else await prisma.clinicSetting.create({ data });
 
     const rxDoc = await prisma.documentTemplate.findFirst({ where: { docName: "Prescription" } });
-    const docData = { heading1: s(fd, "clinicName"), heading8: s(fd, "appointmentLine"), heading9: s(fd, "visitTime"), footer: s(fd, "footer") };
+    const docData = { heading1: s(fd, "clinicName"), heading2: s(fd, "clinicAddress"), heading7: s(fd, "regLabel"), heading8: s(fd, "appointmentLine"), heading9: s(fd, "visitTime"), footer: s(fd, "footer") };
     if (rxDoc) await prisma.documentTemplate.update({ where: { id: rxDoc.id }, data: docData });
     else await prisma.documentTemplate.create({ data: { docName: "Prescription", ...docData } });
 

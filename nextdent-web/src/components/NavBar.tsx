@@ -12,7 +12,7 @@ export default async function NavBar() {
   if (!user) return null; // no chrome on the login screen
 
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+    <header className="no-print sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
         <Link href="/dashboard" className="flex shrink-0 items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-teal-600 text-white">🦷</span>

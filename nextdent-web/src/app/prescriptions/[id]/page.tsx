@@ -1,23 +1,13 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getPrescription, getRxLetterhead } from "@/lib/prescriptions";
+import { getClinicConfig } from "@/lib/settings";
+import { formatRxText } from "@/lib/rx-safety";
 import { softDeleteRx } from "@/lib/actions/prescriptions";
 import { fmtDate, age } from "@/lib/format";
-import PrintButton from "@/components/PrintButton";
-
-const CLINICAL: { key: string; label: string }[] = [
-  { key: "complaints", label: "Chief complaints" },
-  { key: "findingsOnExamination", label: "On examination" },
-  { key: "provisionalDiagnosis", label: "Provisional diagnosis" },
-  { key: "differentialDiagnosis", label: "Differential diagnosis" },
-  { key: "confirmatoryDiagnosis", label: "Diagnosis" },
-  { key: "investigationAdvised", label: "Investigation advised" },
-  { key: "treatmentPlan", label: "Treatment plan" },
-  { key: "procedurePerformed", label: "Procedure done" },
-  { key: "medicalHistory", label: "Medical history" },
-  { key: "drugHistory", label: "Drug history" },
-];
+import RxPrintMode from "@/components/RxPrintMode";
 
 export default async function PrescriptionViewPage({ params }: { params: Promise<{ id: string }> }) {
   await requireUser();
@@ -25,14 +15,41 @@ export default async function PrescriptionViewPage({ params }: { params: Promise
   const rid = Number.parseInt(id, 10);
   if (Number.isNaN(rid)) notFound();
 
-  const [rx, letterhead] = await Promise.all([getPrescription(rid), getRxLetterhead()]);
+  const [rx, letterhead, clinic] = await Promise.all([
+    getPrescription(rid),
+    getRxLetterhead(),
+    getClinicConfig(),
+  ]);
   if (!rx) notFound();
 
+  // The clinic's long-standing default — "Body" means print onto pre-printed paper.
+  const defaultBodyOnly = (clinic.settings?.defaultRxType ?? "Body") === "Body";
+
   const p = rx.patient;
-  const doc = rx.dentist?.person;
+  const dentist = rx.dentist;
   const name = p?.fullName ?? rx.randomName ?? "Anonymous";
-  const sub = p ? `#${p.id}${age(p.dob) != null ? ` · ${age(p.dob)}y` : ""}${p.gender ? ` · ${p.gender}` : ""}` : [rx.randomAge, rx.randomSex].filter(Boolean).join(" · ");
-  const clinical = CLINICAL.filter((c) => (rx as unknown as Record<string, string | null>)[c.key]);
+  const years = p ? age(p.dob) : null;
+  const patientAge = years != null ? `${years} yrs` : (p ? null : rx.randomAge);
+  const sex = p ? p.gender : rx.randomSex;
+  // legacy Access import stored the registration number as a float ("5790.0")
+  const regNo = dentist?.regNo?.replace(/\.0+$/, "");
+
+  // The clinic's stationery has exactly these seven headings, always printed, in this
+  // order. Fields it has no heading for go under the nearest one rather than being
+  // dropped from the paper.
+  const notes: [string, (string | null)[]][] = [
+    ["C/C", [rx.complaints]],
+    ["Known Case of", [rx.medicalHistory, rx.drugHistory && `Drug history: ${rx.drugHistory}`]],
+    ["O/E", [rx.findingsOnExamination]],
+    ["Investigations", [rx.investigationAdvised]],
+    ["Diagnosis", [
+      rx.confirmatoryDiagnosis,
+      rx.provisionalDiagnosis && `Provisional: ${rx.provisionalDiagnosis}`,
+      rx.differentialDiagnosis && `D/D: ${rx.differentialDiagnosis}`,
+    ]],
+    ["Treatment Plan", [rx.treatmentPlan]],
+    ["Treatment Done", [rx.procedurePerformed]],
+  ];
 
   return (
     <div className="space-y-4">
@@ -45,86 +62,100 @@ export default async function PrescriptionViewPage({ params }: { params: Promise
           <form action={softDeleteRx.bind(null, rx.id)}>
             <button className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-rose-600 hover:bg-rose-50 dark:border-slate-700 dark:hover:bg-rose-500/10">Delete</button>
           </form>
-          <PrintButton />
+          <RxPrintMode
+            defaultBodyOnly={defaultBodyOnly}
+            topMm={clinic.settings?.rxBodyTopMm ?? 45}
+            bottomMm={clinic.settings?.rxBodyBottomMm ?? 20}
+          />
         </div>
       </div>
 
-      {/* printable letterhead — intentionally always light ("paper") */}
-      <article className="print-area mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-8 text-slate-900 shadow-sm">
-        <header className="flex items-start justify-between gap-6 border-b-2 border-teal-700 pb-3">
-          <div>
-            <div className="text-lg font-bold text-teal-800">{doc?.fullName ?? letterhead?.heading1 ?? "NextDent"}</div>
-            {rx.dentist?.degree && <div className="text-xs text-slate-600">{rx.dentist.degree}</div>}
-            {rx.dentist?.designation1 && <div className="text-xs text-slate-600">{rx.dentist.designation1}</div>}
-            {(rx.dentist?.regNo || letterhead?.heading7) && (
-              <div className="text-xs text-slate-600">{letterhead?.heading7 ?? "Reg No:"} {rx.dentist?.regNo}</div>
-            )}
-          </div>
-          <div className="text-right">
-            <div className="text-lg font-bold">{letterhead?.heading1 ?? "Dental Clinic"}</div>
-            {letterhead?.heading8 && <div className="text-xs text-slate-600">{letterhead.heading8}</div>}
-            {letterhead?.heading9 && <div className="text-xs text-slate-600">{letterhead.heading9}</div>}
-          </div>
-        </header>
+      {/* The printable sheet — a copy of the clinic's Rx stationery. Always paper-white,
+          also in dark mode; sizes are in pt (see .rx-paper in globals.css). */}
+      <div className="overflow-x-auto print:overflow-visible">
+        <article className="print-area rx-paper mx-auto shadow-sm ring-1 ring-slate-200 dark:ring-slate-700">
+          <header className="rx-letterhead-header rx-head">
+            <div className="rx-clinic">
+              <div className="rx-clinic-name">{letterhead?.heading1 ?? "NextDent"}</div>
+              {letterhead?.heading2 && <div className="rx-clinic-addr">{letterhead.heading2}</div>}
+            </div>
 
-        <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-slate-200 py-2 text-sm">
-          <span><span className="text-slate-500">Name: </span><span className="font-semibold">{name}</span> <span className="text-slate-500">{sub}</span></span>
-          <span className="text-slate-500">Date: <span className="font-medium text-slate-800">{fmtDate(rx.rxDate)}</span></span>
-        </div>
+            <Image src="/rx-logo.png" alt="NextDent" width={925} height={696} unoptimized loading="eager" className="rx-logo" />
 
-        <div className="grid gap-6 py-4 md:grid-cols-3">
-          {/* clinical sidebar */}
-          <div className="space-y-3 text-sm md:col-span-1 md:border-r md:border-slate-200 md:pr-4">
-            {clinical.length === 0 ? (
-              <p className="text-slate-400">No clinical notes.</p>
-            ) : clinical.map((c) => (
-              <div key={c.key}>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{c.label}</div>
-                <div className="whitespace-pre-wrap text-slate-700">{(rx as unknown as Record<string, string>)[c.key]}</div>
-              </div>
-            ))}
+            <div className="rx-doctor">
+              {dentist?.person?.fullName && <div className="rx-doctor-name">{dentist.person.fullName}</div>}
+              {dentist?.degree && <div className="rx-doctor-degree">{dentist.degree}</div>}
+              {dentist?.designation1 && <div>{dentist.designation1}</div>}
+              {dentist?.designation2 && <div>{dentist.designation2}</div>}
+              {dentist?.clinicName && <div>{dentist.clinicName}</div>}
+              {regNo && <div>{letterhead?.heading7 ?? "BMDC Reg. No:"} {regNo}</div>}
+              {letterhead?.heading8 && <div>{letterhead.heading8}</div>}
+              {letterhead?.heading9 && <div>{letterhead.heading9}</div>}
+            </div>
+          </header>
+
+          {/* columns sit where the stationery prints them: x = 60, 275, 356, 457pt */}
+          <div className="rx-patient">
+            <div style={{ left: "42.4pt", width: "210pt" }}><b>Name:</b>{name}</div>
+            <div style={{ left: "256.6pt", width: "78pt" }}><b>Sex:</b>{sex}</div>
+            <div style={{ left: "337.7pt", width: "98pt" }}><b>Age:</b>{patientAge}</div>
+            <div style={{ left: "439pt", width: "118pt" }}><b>Date:</b>{fmtDate(rx.rxDate)}</div>
           </div>
 
-          {/* Rx medicines */}
-          <div className="md:col-span-2">
-            <div className="mb-2 text-3xl font-serif text-teal-800">℞</div>
-            {rx.drugs.length === 0 ? (
-              <p className="text-sm text-slate-400">No medicines.</p>
-            ) : (
-              <ol className="space-y-2.5">
-                {rx.drugs.map((d, i) => (
-                  <li key={d.id} className="flex gap-2 text-sm">
-                    <span className="text-slate-400">{i + 1}.</span>
-                    <div>
-                      <div className="font-semibold text-slate-800">{d.drug}</div>
-                      <div className="text-slate-600">
-                        {[d.dose, d.meal, d.duration].filter(Boolean).join("  —  ")}
+          <div className="rx-body">
+            <div className="rx-notes">
+              {notes.map(([label, lines]) => {
+                const text = lines.filter(Boolean).join("\n");
+                return (
+                  <section key={label} className="rx-note">
+                    <div className="rx-note-label">{label}</div>
+                    {text && <div className="rx-note-text">{text}</div>}
+                  </section>
+                );
+              })}
+            </div>
+
+            <div className="rx-meds">
+              <Image src="/rx-mark.png" alt="Rx." width={372} height={190} unoptimized loading="eager" className="rx-mark" />
+              {rx.drugs.length > 0 && (
+                <ol>
+                  {rx.drugs.map((d, i) => (
+                    <li key={d.id} className="rx-drug">
+                      {/* ISMP: keep clear space between the number and the drug name, or
+                          the number is read as part of the dose. */}
+                      <span className="rx-drug-num tabular-nums">{i + 1}.</span>
+                      <div className="min-w-0">
+                        <div className="rx-drug-name">{formatRxText(d.drug)}</div>
+                        {/* dosing is written in Bangla — needs the Bengali face */}
+                        <div className="rx-dosing bn">
+                          {[d.dose, d.meal, d.duration].filter(Boolean).join("  —  ")}
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
+                    </li>
+                  ))}
+                </ol>
+              )}
 
-            {rx.advise && (
-              <div className="mt-5 text-sm">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Advice</div>
-                <div className="whitespace-pre-wrap text-slate-700">{rx.advise}</div>
-              </div>
-            )}
-            {(rx.followUpDate || rx.followUpReason) && (
-              <div className="mt-3 text-sm text-slate-700">
-                <span className="font-semibold">Follow-up: </span>
-                {fmtDate(rx.followUpDate)}{rx.followUpReason ? ` — ${rx.followUpReason}` : ""}
-              </div>
-            )}
+              {/* Advice reads as guidance to the patient, so it gets the stationery's own
+                  heading style rather than colour — prescriptions get photocopied. */}
+              {rx.advise && (
+                <div className="rx-extra">
+                  <div className="rx-note-label">Advice</div>
+                  <div className="rx-note-text bn">{rx.advise}</div>
+                </div>
+              )}
+              {(rx.followUpDate || rx.followUpReason) && (
+                <div className="rx-extra">
+                  <b>Follow-up: </b>
+                  {fmtDate(rx.followUpDate)}{rx.followUpReason ? ` — ${rx.followUpReason}` : ""}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
-        {letterhead?.footer && (
-          <footer className="mt-4 border-t border-slate-200 pt-2 text-center text-xs italic text-slate-500">{letterhead.footer}</footer>
-        )}
-      </article>
+          <footer className="rx-letterhead-footer rx-foot">{letterhead?.footer}</footer>
+        </article>
+      </div>
     </div>
   );
 }

@@ -6,8 +6,9 @@ import { saveClinicConfig, type ClinicFormState } from "@/lib/actions/settings";
 type Settings = {
   defaultRxType: string | null; autoAddAppointment: boolean; autoCompleteAppointment: boolean;
   workingDays: number[]; openTime: string; closeTime: string; slotMinutes: number;
+  rxBodyTopMm: number; rxBodyBottomMm: number;
 } | null;
-type Doc = { heading1: string | null; heading8: string | null; heading9: string | null; footer: string | null } | null;
+type Doc = { heading1: string | null; heading2: string | null; heading7: string | null; heading8: string | null; heading9: string | null; footer: string | null } | null;
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -34,6 +35,22 @@ export default function ClinicConfigForm({ settings, rxDoc }: { settings: Settin
           <label className="flex items-center gap-2 pt-7 text-sm text-slate-700 dark:text-slate-300">
             <input type="checkbox" name="autoCompleteAppointment" defaultChecked={settings?.autoCompleteAppointment ?? false} /> Auto-complete it
           </label>
+        </div>
+
+        {/* Only meaningful for "Body" prints, where the paper already carries the letterhead. */}
+        <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Space left blank on a <strong>Body / Short</strong> print so the prescription clears the
+            letterhead already on the paper. Measure your stationery, print one, and adjust.
+          </p>
+          <div className="mt-3 grid gap-4 sm:grid-cols-3">
+            <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Top space (mm)</span>
+              <input type="number" name="rxBodyTopMm" min="0" max="150" step="1"
+                defaultValue={settings?.rxBodyTopMm ?? 45} className={inputCls} /></label>
+            <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Bottom space (mm)</span>
+              <input type="number" name="rxBodyBottomMm" min="0" max="150" step="1"
+                defaultValue={settings?.rxBodyBottomMm ?? 20} className={inputCls} /></label>
+          </div>
         </div>
       </section>
 
@@ -68,10 +85,18 @@ export default function ClinicConfigForm({ settings, rxDoc }: { settings: Settin
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
           <label className="block sm:col-span-2"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Clinic name</span>
             <input name="clinicName" defaultValue={rxDoc?.heading1 ?? ""} className={inputCls} /></label>
+          {/* printed under the clinic name, top-left, one line per line */}
+          <label className="block sm:col-span-2"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Clinic address</span>
+            <textarea name="clinicAddress" rows={5} defaultValue={rxDoc?.heading2 ?? ""}
+              placeholder={"1st Floor, Stone Assurance\nKazi's Den\nBeside Press Club\nAgarpur Road,\nSadar Road, Barishal"}
+              className={inputCls} /></label>
           <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Appointment line</span>
             <input name="appointmentLine" defaultValue={rxDoc?.heading8 ?? ""} placeholder="For Appointment: 01…" className={inputCls} /></label>
           <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Visit time</span>
             <input name="visitTime" defaultValue={rxDoc?.heading9 ?? ""} placeholder="Visit Time: 3–7 PM" className={inputCls} /></label>
+          {/* label only — the number itself lives on each doctor, under Team */}
+          <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Registration label</span>
+            <input name="regLabel" defaultValue={rxDoc?.heading7 ?? ""} placeholder="BMDC Reg No:" className={inputCls} /></label>
           <label className="block sm:col-span-2"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Footer</span>
             <input name="footer" defaultValue={rxDoc?.footer ?? ""} className={inputCls} /></label>
         </div>

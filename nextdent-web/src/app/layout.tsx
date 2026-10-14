@@ -1,10 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Noto_Sans_Bengali } from "next/font/google";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+// Bangla dosing text ("১+০+১", "খাবার পর খাবেন") is printed on prescriptions. Without a
+// Bengali face it falls back to whatever the clinic's PC happens to have, so conjuncts
+// render differently — or badly — from one machine to the next. Self-hosted via
+// next/font so the printed output is identical everywhere.
+const notoBengali = Noto_Sans_Bengali({
+  variable: "--font-bengali",
+  subsets: ["bengali"],
+  weight: ["400", "600"],
+});
 
 export const metadata: Metadata = {
   title: "NextDent — Practice Manager",
@@ -19,7 +28,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100`}
+      className={`${geistSans.variable} ${geistMono.variable} ${notoBengali.variable} h-full antialiased bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100`}
     >
       <body className="min-h-full flex flex-col">
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />

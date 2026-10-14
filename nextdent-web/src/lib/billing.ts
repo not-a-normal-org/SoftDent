@@ -1,8 +1,8 @@
 import "server-only";
 import { prisma } from "./prisma";
+import { afterDiscountClient } from "./billing-math";
 
-export const afterDiscount = (total: number, discountPercent: number) =>
-  Math.max(0, Math.round(total * (1 - (discountPercent || 0) / 100)));
+export const afterDiscount = afterDiscountClient;
 
 export function getCase(id: number) {
   return prisma.treatmentCase.findUnique({

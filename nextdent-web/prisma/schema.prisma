@@ -4,14 +4,19 @@
 // ETL inserts explicit ids then bumps the sequence). New tables (history/search) use fresh ids.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // "native" for local dev; debian target for the Docker runtime (node:20-bookworm-slim)
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrations need a session (non-transaction-pooled) connection: a transaction
+  // pooler rewrites connections under Prisma and breaks DDL and advisory locks.
+  // Prisma errors if this is unset, so set it to the same value as DATABASE_URL
+  // anywhere there is no separate pooler (local dev, docker-compose).
+  directUrl = env("DIRECT_URL")
 }
 
 // ─────────────────────────── enums ───────────────────────────
@@ -67,15 +72,15 @@ model User {
 
 // Per-user Google Calendar connection (each staff member links their own Google account).
 model CalendarConnection {
-  id           Int      @id @default(autoincrement())
-  user         User     @relation(fields: [userId], references: [id])
-  userId       Int      @unique
+  id           Int       @id @default(autoincrement())
+  user         User      @relation(fields: [userId], references: [id])
+  userId       Int       @unique
   googleEmail  String?
   accessToken  String?
   refreshToken String?
   expiresAt    DateTime?
-  calendarId   String?  @default("primary")
-  createdAt    DateTime @default(now())
+  calendarId   String?   @default("primary")
+  createdAt    DateTime  @default(now())
 }
 
 model Session {
@@ -91,30 +96,30 @@ model Session {
 }
 
 model Doctor {
-  id                    Int      @id @default(autoincrement())
-  person                Person   @relation(fields: [personId], references: [id])
-  personId              Int      @unique
-  isOwner               Boolean  @default(false)
-  degree                String?
-  designation1          String?
-  designation2          String?
-  clinicName            String?
-  institute             String?
-  session               String?
-  regNo                 String?
-  activeStatus          String?
+  id                     Int     @id @default(autoincrement())
+  person                 Person  @relation(fields: [personId], references: [id])
+  personId               Int     @unique
+  isOwner                Boolean @default(false)
+  degree                 String?
+  designation1           String?
+  designation2           String?
+  clinicName             String?
+  institute              String?
+  session                String?
+  regNo                  String?
+  activeStatus           String?
   labBillReductionMethod String?
-  revenueShare          Json? // legacy owner/guest/OT/chamber % matrix (data-model §7.2)
+  revenueShare           Json? // legacy owner/guest/OT/chamber % matrix (data-model §7.2)
   // Per-contract revenue split (admin-configurable). Chamber/clinic gets the remainder.
-  consultantSharePct    Float   @default(20) // this doctor's cut when they are the consultant
-  operatorSharePct      Float   @default(40) // this doctor's cut when they operate (OT)
-  deductLabBeforeSplit  Boolean @default(true)
-  note                  String?
+  consultantSharePct     Float   @default(20) // this doctor's cut when they are the consultant
+  operatorSharePct       Float   @default(40) // this doctor's cut when they operate (OT)
+  deductLabBeforeSplit   Boolean @default(true)
+  note                   String?
 
-  patients          Patient[]      @relation("ConsultantDoctor")
-  appointments      Appointment[]
-  treatmentLines    TreatmentLine[] @relation("OperatingDoctor")
-  prescriptions     Prescription[]
+  patients       Patient[]       @relation("ConsultantDoctor")
+  appointments   Appointment[]
+  treatmentLines TreatmentLine[] @relation("OperatingDoctor")
+  prescriptions  Prescription[]
 }
 
 // ─────────────────────────── patients ───────────────────────────
@@ -146,19 +151,20 @@ model Patient {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  cases            TreatmentCase[]
-  appointments     Appointment[]
-  prescriptions    Prescription[]
-  clinicalNotes    ClinicalNote[]
-  historyVersions  PatientHistoryVersion[]
-  toothEntries     ToothChartEntry[]
-  attachments      Attachment[]
-  recalls          Recall[]
-  events           PatientEvent[]
-  labOrders        LabOrder[]
-  connections      PatientConnection[] @relation("connFrom")
-  connectedTo      PatientConnection[] @relation("connTo")
-  healthRecords    HealthRecord[]
+  cases           TreatmentCase[]
+  appointments    Appointment[]
+  prescriptions   Prescription[]
+  smsLogs         SmsLog[]
+  clinicalNotes   ClinicalNote[]
+  historyVersions PatientHistoryVersion[]
+  toothEntries    ToothChartEntry[]
+  attachments     Attachment[]
+  recalls         Recall[]
+  events          PatientEvent[]
+  labOrders       LabOrder[]
+  connections     PatientConnection[]     @relation("connFrom")
+  connectedTo     PatientConnection[]     @relation("connTo")
+  healthRecords   HealthRecord[]
 
   @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([nickName(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -167,16 +173,16 @@ model Patient {
 
 // ─────────────────────── treatment & billing ───────────────────────
 model Treatment {
-  id           Int     @id @default(autoincrement())
-  name         String  @unique
-  defaultPrice Int     @default(0)
+  id           Int    @id @default(autoincrement())
+  name         String @unique
+  defaultPrice Int    @default(0)
 
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model TreatmentCase {
-  id          Int     @id @default(autoincrement())
-  patient     Patient @relation(fields: [patientId], references: [id])
+  id          Int      @id @default(autoincrement())
+  patient     Patient  @relation(fields: [patientId], references: [id])
   patientId   Int
   name        String?
   description String?
@@ -188,18 +194,18 @@ model TreatmentCase {
 }
 
 model TreatmentLine {
-  id                  Int       @id @default(autoincrement())
+  id                  Int           @id @default(autoincrement())
   case                TreatmentCase @relation(fields: [caseId], references: [id])
   caseId              Int
-  operatingDoctor     Doctor?   @relation("OperatingDoctor", fields: [operatingDoctorId], references: [id])
+  operatingDoctor     Doctor?       @relation("OperatingDoctor", fields: [operatingDoctorId], references: [id])
   operatingDoctorId   Int?
   treatmentDate       DateTime?
   treatmentName       String?
   description         String?
-  totalAmount         Int       @default(0)
-  discountPercent     Float     @default(0)
-  afterDiscountAmount Int       @default(0)
-  amountPaid          Int       @default(0)
+  totalAmount         Int           @default(0)
+  discountPercent     Float         @default(0)
+  afterDiscountAmount Int           @default(0)
+  amountPaid          Int           @default(0)
   note                String?
 
   payments Payment[]
@@ -208,31 +214,31 @@ model TreatmentLine {
 
 // NEW: proper payment ledger (legacy tracked only a running amountPaid on the line)
 model Payment {
-  id              Int       @id @default(autoincrement())
+  id              Int           @id @default(autoincrement())
   treatmentLine   TreatmentLine @relation(fields: [treatmentLineId], references: [id])
   treatmentLineId Int
   amount          Int
   method          String?
-  paidAt          DateTime  @default(now())
+  paidAt          DateTime      @default(now())
   note            String?
 }
 
 // ─────────────────────────── appointments ───────────────────────────
 model Appointment {
-  id             Int       @id @default(autoincrement())
-  doctor         Doctor?   @relation(fields: [doctorId], references: [id])
-  doctorId       Int?
-  patient        Patient   @relation(fields: [patientId], references: [id])
-  patientId      Int
-  allocatedUnit  String?
-  statusCode     Int? // legacy AppointmentStatusID — meaning TBD (data-model §7)
-  status         String?
+  id              Int       @id @default(autoincrement())
+  doctor          Doctor?   @relation(fields: [doctorId], references: [id])
+  doctorId        Int?
+  patient         Patient   @relation(fields: [patientId], references: [id])
+  patientId       Int
+  allocatedUnit   String?
+  statusCode      Int? // legacy AppointmentStatusID — meaning TBD (data-model §7)
+  status          String?
   appointmentDate DateTime?
-  startsAt       DateTime?
-  endsAt         DateTime?
-  smsSent        Boolean   @default(false)
-  note           String?
-  gcalId         String?
+  startsAt        DateTime?
+  endsAt          DateTime?
+  smsSent         Boolean   @default(false)
+  note            String?
+  gcalId          String?
 
   @@index([appointmentDate])
   @@index([patientId])
@@ -240,12 +246,16 @@ model Appointment {
 
 // ─────────────────────────── prescriptions ───────────────────────────
 model Drug {
-  id           Int     @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   manufacturer String?
   brandName    String?
   genericName  String?
   strength     String?
   dosageForm   String?
+  // how often this drug has been picked in the Rx editor — ranks the type-ahead so a
+  // doctor's regulars surface first. Backfilled from prescription history on migration.
+  usageCount   Int       @default(0)
+  lastUsedAt   DateTime?
 
   @@index([brandName(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([genericName(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -276,6 +286,9 @@ model Prescription {
   randomName                  String?
   randomAge                   String?
   randomSex                   String?
+  /// Free-text note on the prescription. The Barishal legacy database carries this as
+  /// its own column; the Dhaka one had no equivalent, so it arrived with the import.
+  note                        String?
   deletedAt                   DateTime?
   deletedBy                   String?
 
@@ -283,10 +296,10 @@ model Prescription {
 }
 
 model PrescriptionDrug {
-  id             Int     @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   prescription   Prescription @relation(fields: [prescriptionId], references: [id])
   prescriptionId Int
-  sortOrder      Int     @default(0)
+  sortOrder      Int          @default(0)
   drug           String?
   dose           String? // Bengali dosing text
   meal           String?
@@ -337,10 +350,10 @@ model RxTemplate {
 }
 
 model RxTemplateDrug {
-  id         Int    @id @default(autoincrement())
+  id         Int        @id @default(autoincrement())
   template   RxTemplate @relation(fields: [templateId], references: [id])
   templateId Int
-  sortOrder  Int    @default(0)
+  sortOrder  Int        @default(0)
   drug       String?
   dose       String?
   meal       String?
@@ -351,6 +364,9 @@ model RxTemplateDrug {
 model SmsTemplate {
   id      Int     @id @default(autoincrement())
   name    String
+  // Legacy Access shape: a heading plus up to six fragments that the old VBA
+  // concatenated around runtime values ("Dear" + name + ", your due is BDT" + amount).
+  // Kept as the English reference for the Bangla rewrite; `body` supersedes them.
   heading String?
   body1   String?
   body2   String?
@@ -358,6 +374,20 @@ model SmsTemplate {
   body4   String?
   body5   String?
   body6   String?
+
+  /// Stable identifier used in code and logs: CONFIRMED, REMINDED, PAYMENT_DUE, …
+  key       String?  @unique
+  /// The message actually sent, with {placeholders}. Must be Bangla — the gateway
+  /// rejects English on a masked sender ID with code 1012.
+  body      String?
+  /// Appointment status this template is offered for. Only a hint for the UI: unlike
+  /// the Access app, where AppointmentStatusID was a foreign key INTO this table and
+  /// changing a status could fire a message, sending here is always explicit.
+  statusKey String?
+  active    Boolean  @default(true)
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([statusKey])
 }
 
 model IntegrationSetting {
@@ -372,17 +402,25 @@ model IntegrationSetting {
 }
 
 model ClinicSetting {
-  id                     Int     @id @default(autoincrement())
-  defaultRxType          String?
-  bodyRxReportName       String?
-  fullRxReportName       String?
-  autoAddAppointment     Boolean @default(false)
+  id                      Int     @id @default(autoincrement())
+  // "Body" prints the prescription only, for pre-printed letterhead stationery;
+  // "Full" prints the clinic header/footer too. Carried over from the Access app,
+  // where the clinic's default was already "Body".
+  defaultRxType           String?
+  bodyRxReportName        String?
+  fullRxReportName        String?
+  // Blank space (mm) reserved at the top/bottom of a "Body" print so the content
+  // clears the letterhead already printed on the paper. Tunable per clinic because
+  // every letterhead is a different height — measure the stationery and set these.
+  rxBodyTopMm             Int     @default(45)
+  rxBodyBottomMm          Int     @default(20)
+  autoAddAppointment      Boolean @default(false)
   autoCompleteAppointment Boolean @default(false)
   // Configurable schedule (0=Sun … 6=Sat). Default mirrors the legacy "Sat–Wed" hours.
-  workingDays            Int[]   @default([6, 0, 1, 2, 3])
-  openTime               String  @default("15:00")
-  closeTime              String  @default("19:00")
-  slotMinutes            Int     @default(30)
+  workingDays             Int[]   @default([6, 0, 1, 2, 3])
+  openTime                String  @default("15:00")
+  closeTime               String  @default("19:00")
+  slotMinutes             Int     @default(30)
 }
 
 model DocumentTemplate {
@@ -665,4 +703,37 @@ model AuditLog {
   at       DateTime @default(now())
 
   @@index([entity, entityId])
+}
+
+// ─────────────────────── SMS (BulkSMS BD gateway) ───────────────────────
+
+/// A message the clinic can send, with {placeholders} filled at send time.
+/// Replaces the legacy `tbl_Sms`, whose rows were a heading plus six body fragments
+/// that the Access front-end concatenated around values. Crucially, that table was
+/// also the appointment *status* list (AppointmentStatusID was a FK into it), so
+/// changing a status could fire an SMS as a side effect. Templates and statuses are
+/// separate here: `statusKey` only says which status a template is *offered* for.
+
+/// Every send attempt, successful or not. Gives staff a per-patient history and stops
+/// the same reminder going out twice.
+model SmsLog {
+  id          Int      @id @default(autoincrement())
+  patient     Patient? @relation(fields: [patientId], references: [id])
+  patientId   Int?
+  /// Stored as sent (88017…), since a patient's number may change later.
+  phone       String
+  body        String
+  templateKey String?
+  /// SENT when the gateway returned 202, FAILED otherwise.
+  status      String
+  /// Raw gateway response code — 202 success, 1007 insufficient balance, etc.
+  gatewayCode String?
+  error       String?
+  /// Billable segments: Bangla is UCS-2, so 70 characters for one segment and 67
+  /// each once concatenated — roughly double the cost of Latin text.
+  segments    Int      @default(1)
+  sentAt      DateTime @default(now())
+
+  @@index([patientId])
+  @@index([sentAt])
 }

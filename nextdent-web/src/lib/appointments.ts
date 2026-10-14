@@ -42,6 +42,25 @@ export function getUpcoming(limit = 25) {
   });
 }
 
+/** Today's and tomorrow's schedule, for the dashboard's agenda panel. */
+export async function getTodayAndTomorrow() {
+  const today = dayRange(new Date());
+  const tomorrow = dayRange(new Date(today.start.getTime() + 24 * 60 * 60 * 1000));
+  const [todayList, tomorrowList] = await Promise.all([
+    prisma.appointment.findMany({
+      where: { appointmentDate: { gte: today.start, lt: today.end } },
+      include: apptInclude,
+      orderBy: apptOrder,
+    }),
+    prisma.appointment.findMany({
+      where: { appointmentDate: { gte: tomorrow.start, lt: tomorrow.end } },
+      include: apptInclude,
+      orderBy: apptOrder,
+    }),
+  ]);
+  return { today: todayList, tomorrow: tomorrowList, todayDate: today.start, tomorrowDate: tomorrow.start };
+}
+
 export function getAppointment(id: number) {
   return prisma.appointment.findUnique({ where: { id }, include: apptInclude });
 }

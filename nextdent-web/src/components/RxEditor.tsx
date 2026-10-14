@@ -37,6 +37,12 @@ const CLINICAL: { key: string; label: string; full?: boolean }[] = [
   { key: "advise", label: "Advice", full: true },
 ];
 
+// Advice is split out of the clinical-notes block: the notes are recorded *before*
+// prescribing (they justify it), while advice is written last, after the medicines.
+const ADVICE_KEY = "advise";
+const NOTES = CLINICAL.filter((c) => c.key !== ADVICE_KEY);
+const ADVICE = CLINICAL.find((c) => c.key === ADVICE_KEY)!;
+
 const DOSE_PRESETS = ["১+০+১", "১+১+১", "০+০+১", "১+০+০", "½+০+½"];
 const MEAL_PRESETS = ["খাবার পর খাবেন", "খাবার আগে খাবেন", "খাবার সাথে খাবেন"];
 const DURATION_PRESETS = ["৩ দিন", "৫ দিন", "৭ দিন", "১০ দিন", "১৪ দিন", "চলবে"];
@@ -173,6 +179,19 @@ export default function RxEditor({
         )}
       </section>
 
+      {/* clinical notes — above the medicines: the findings justify what is prescribed */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Clinical notes</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {NOTES.map((c) => (
+            <label key={c.key} className={`block ${c.full ? "sm:col-span-2" : ""}`}>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{c.label}</span>
+              <textarea value={fields[c.key]} onChange={(e) => setField(c.key, e.target.value)} rows={2} className={`mt-1 ${inputCls}`} />
+            </label>
+          ))}
+        </div>
+      </section>
+
       {/* drug lines */}
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="mb-3 flex items-center justify-between">
@@ -206,16 +225,14 @@ export default function RxEditor({
         {lines.length === 0 && <p className="mt-3 text-center text-sm text-slate-400 dark:text-slate-500">Search a drug above to add it, or add a blank line.</p>}
       </section>
 
-      {/* clinical notes */}
+      {/* advice & follow-up — last, written after the prescription itself */}
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Clinical notes</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Advice &amp; follow-up</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          {CLINICAL.map((c) => (
-            <label key={c.key} className={`block ${c.full ? "sm:col-span-2" : ""}`}>
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{c.label}</span>
-              <textarea value={fields[c.key]} onChange={(e) => setField(c.key, e.target.value)} rows={2} className={`mt-1 ${inputCls}`} />
-            </label>
-          ))}
+          <label className="block sm:col-span-2">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{ADVICE.label}</span>
+            <textarea value={fields[ADVICE.key]} onChange={(e) => setField(ADVICE.key, e.target.value)} rows={3} className={`mt-1 ${inputCls}`} />
+          </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Follow-up date</span>
             <input type="date" name="followUpDate" defaultValue={toDateInput(rx?.followUpDate)} className={`mt-1 ${inputCls}`} />

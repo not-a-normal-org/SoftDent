@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { getDashboardStats, type DashboardStats } from "@/lib/dashboard";
+import { getTodayAndTomorrow } from "@/lib/appointments";
+import AgendaPanel from "@/components/AgendaPanel";
 import { CARD_MODULES, canAccessModule } from "@/lib/modules";
 import { taka, fmtDate } from "@/lib/format";
 
@@ -26,7 +28,7 @@ function metricFor(key: string, s: DashboardStats): string {
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const s = await getDashboardStats();
+  const [s, agenda] = await Promise.all([getDashboardStats(), getTodayAndTomorrow()]);
 
   const kpis = [
     { label: "Patients", value: s.patients.toLocaleString(), tone: "bg-teal-50 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300", href: "/patients" },
@@ -44,8 +46,11 @@ export default async function DashboardPage() {
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{fmtDate(new Date())} · clinic overview</p>
       </header>
 
+      {/* left: the clinic at a glance — right: what is actually booked */}
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="space-y-8 xl:col-span-2">
       {/* KPI tiles */}
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
         {kpis.map((k) => {
           const tile = (
             <div className={`rounded-2xl border border-slate-200 p-4 shadow-sm dark:border-slate-800 ${k.tone}`}>
@@ -60,7 +65,7 @@ export default async function DashboardPage() {
       {/* module cards */}
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Modules</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           {CARD_MODULES.filter((m) => canAccessModule(m, user.role)).map((m) => {
             const ready = m.status === "ready";
             const inner = (
@@ -87,6 +92,17 @@ export default async function DashboardPage() {
           })}
         </div>
       </section>
+        </div>
+
+        <div className="xl:sticky xl:top-6 xl:self-start">
+          <AgendaPanel
+            today={agenda.today}
+            tomorrow={agenda.tomorrow}
+            todayDate={agenda.todayDate}
+            tomorrowDate={agenda.tomorrowDate}
+          />
+        </div>
+      </div>
     </div>
   );
 }

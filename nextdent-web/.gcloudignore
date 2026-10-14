@@ -1,0 +1,24 @@
+# What NOT to upload to Cloud Build when running `gcloud run deploy --source .`
+# Without this file the whole directory goes up: ~500 MB of node_modules, the
+# local build, and — most importantly — the .env files holding the DB password.
+
+.git
+.gitignore
+
+# secrets: these must never leave this machine
+.env
+.env.*
+!.env.example
+
+# reinstalled by `npm ci` inside the Dockerfile
+node_modules
+
+# rebuilt by `npm run build` inside the Dockerfile
+.next
+out
+
+# local-only artifacts
+demo
+*.log
+.DS_Store
+coverage

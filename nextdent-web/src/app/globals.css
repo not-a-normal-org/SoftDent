@@ -20,12 +20,108 @@ body {
   scrollbar-color: #334155 transparent;
 }
 
-/* Print: show only the prescription letterhead, drop all app chrome. */
+/* Print: show only the printable document, drop all app chrome. */
 @media print {
-  header, .no-print { display: none !important; }
+  /* .no-print only — NOT a bare `header` selector. The nav is a <header>, but so is
+     the prescription letterhead, so hiding the element type stripped the clinic header
+     from every "Full" print. NavBar carries .no-print instead. */
+  .no-print { display: none !important; }
   main { max-width: none !important; padding: 0 !important; }
   body { background: #fff !important; }
   .print-area { box-shadow: none !important; border: 0 !important; margin: 0 !important; max-width: 100% !important; }
+
+  /* "Body / Short" format: the paper already carries the clinic letterhead, so drop
+     ours. The blank space that replaces it is set as an @page margin, injected by
+     RxPrintMode — NOT as padding here. Padding is applied once to the element box, so
+     on a prescription that runs to a second sheet page 2 would print straight over the
+     pre-printed letterhead; @page margins apply to every page. */
+  .rx-body-only .rx-letterhead-header,
+  .rx-body-only .rx-letterhead-footer { display: none !important; }
+
+  /* Pre-printed paper has its own layout; the A4 page-filling heights below would push
+     the body onto a second sheet under the reserved @page margins. */
+  .rx-body-only .rx-paper { min-height: 0; }
+
+  /* keep a drug name and its dose from being split across a page break */
+  .rx-drug { break-inside: avoid; page-break-inside: avoid; }
+
+  /* Printed prescriptions have a legibility floor: ISMP puts safety-relevant text at
+     11–12pt, and a field study found most real prescriptions fall below it. Screen
+     sizes are smaller than that, so bump them for paper. (The prescription itself is
+     set in pt below and is the same on screen and paper.) */
+  .print-area { font-size: 11pt; line-height: 1.45; color: #000; }
+}
+
+/* ── Prescription paper ──────────────────────────────────────────────────────────
+   A copy of the clinic's own Rx stationery (RxDemo.pdf, A4). Every position below was
+   measured off that PDF in points, so the page is laid out in pt — on screen 1pt is
+   1.33px and the preview is the printed sheet at 100%. Printed with zero side (and,
+   for Full, top/bottom) @page margins (RxPrintMode), so offsets are from the paper's edge.
+   Declared after the print block on purpose: same specificity as .print-area, so
+   these win and the measured leading survives printing. */
+.rx-paper {
+  width: 595.3pt;
+  /* a hair under A4's 841.9pt, so rounding never spills a blank second page */
+  min-height: 841pt;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  color: #000;
+  font-family: "Times New Roman", Times, "Liberation Serif", serif;
+  font-size: 11pt;
+  line-height: 1.15;
+}
+
+/* The doctor block stays in flow so a longer one (wrapped degree, extra designation)
+   grows the header instead of running over the rule; 156pt is the stationery's own. */
+.rx-head { position: relative; flex: none; min-height: 156pt; display: flex; justify-content: flex-end; padding: 39.8pt 61.7pt 6pt 0; }
+.rx-clinic { position: absolute; left: 60.4pt; top: 43pt; max-width: 172pt; }
+.rx-clinic-name { font-size: 17pt; }
+.rx-clinic-addr { margin-top: 1pt; font-size: 11pt; line-height: 13.75pt; white-space: pre-line; }
+.rx-logo { position: absolute; left: 239.4pt; top: 39pt; width: 111pt; height: auto; }
+/* 180pt keeps wrapped lines clear of the logo's wordmark */
+.rx-doctor { max-width: 180pt; text-align: right; font-size: 10pt; line-height: 12pt; }
+.rx-doctor-name { font-size: 14pt; font-weight: 700; line-height: 17.8pt; white-space: nowrap; }
+.rx-doctor-degree { font-size: 9pt; font-weight: 700; line-height: 11.7pt; }
+
+/* the rules run 18pt in from the left edge and 19.8pt from the right */
+.rx-patient,
+.rx-body,
+.rx-foot { margin: 0 19.8pt 0 18pt; }
+
+.rx-patient { position: relative; flex: none; height: 42.75pt; border-top: 0.75pt solid #000; border-bottom: 0.75pt solid #000; }
+.rx-patient > div { position: absolute; top: 0.6pt; overflow: hidden; }
+.rx-patient b { font-weight: 700; margin-right: 4pt; }
+
+/* fills whatever the sheet has left, so the footer rule sits at the stationery's 768pt */
+.rx-body { display: flex; flex: 1 0 auto; }
+.rx-notes { flex: none; width: 216.75pt; border-right: 0.75pt solid #000; padding: 9.6pt 8pt 8pt 42.4pt; }
+.rx-note { min-height: 78pt; padding-bottom: 8pt; }
+.rx-note:last-child { min-height: 0; }
+.rx-note-label { font-size: 10pt; font-weight: 700; text-decoration: underline; text-underline-offset: 1.5pt; }
+.rx-note-text { margin-top: 3pt; white-space: pre-wrap; }
+
+.rx-meds { flex: 1; min-width: 0; padding: 16pt 20pt 12pt 5.75pt; }
+.rx-mark { width: 35.5pt; height: auto; }
+.rx-meds ol { margin: 10pt 0 0 14pt; }
+.rx-drug { display: flex; gap: 8pt; margin-bottom: 9pt; }
+.rx-drug-num { width: 12pt; flex: none; text-align: right; }
+.rx-drug-name { font-size: 12pt; font-weight: 700; }
+.rx-dosing { font-size: 11pt; }
+/* Dosing mixes English with Bangla: Latin stays in the sheet's Times, and only the
+   Bengali glyphs (which Times lacks) fall through to the Bengali face. */
+.rx-paper .bn { font-family: "Times New Roman", Times, var(--font-bengali), serif; }
+.rx-extra { margin: 14pt 0 0 14pt; }
+
+.rx-foot { flex: none; height: 73pt; border-top: 0.75pt solid #000; padding-top: 6.6pt; text-align: center; font-size: 9pt; font-weight: 700; }
+
+/* Bangla runs alongside Latin. Bengali is unicameral and reads smaller and denser at
+   the same nominal size, and its matras need more vertical room than Latin descenders,
+   so it gets a slight size bump and looser leading. */
+.bn {
+  font-family: var(--font-bengali), var(--font-geist-sans), system-ui, sans-serif;
+  font-size: 1.08em;
+  line-height: 1.6;
 }
 
 /* Smooth light/dark switch — enabled only while `.theme-transition` is on <html>

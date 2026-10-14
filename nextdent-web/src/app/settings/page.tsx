@@ -5,8 +5,11 @@ const CARDS = [
   { href: "/settings/treatments", icon: "🦷", title: "Treatment catalog", desc: "Procedures & default prices used across billing" },
   { href: "/settings/lists", icon: "📋", title: "Lookup lists", desc: "Occupations, relations, chairs, shades, categories…" },
   { href: "/settings/rx-templates", icon: "℞", title: "Rx templates", desc: "Reusable prescription templates with drugs" },
+  { href: "/settings/sms", icon: "💬", title: "SMS templates", desc: "Bangla appointment & payment messages, gateway balance" },
+  { href: "/settings/sms/test", icon: "📲", title: "SMS test", desc: "Send a real message to check the gateway, and see recent sends" },
   { href: "/settings/clinic", icon: "🏥", title: "Clinic & letterhead", desc: "Schedule, Rx defaults, automation, prescription header/footer" },
   { href: "/settings/calendar", icon: "📆", title: "Google Calendar", desc: "Connect a Google account to sync appointments" },
+  { href: "/audit", icon: "🛡", title: "Audit log", desc: "Who changed what, and when" },
 ];
 
 export default async function SettingsPage() {
