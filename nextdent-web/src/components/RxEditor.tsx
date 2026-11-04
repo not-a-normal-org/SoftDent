@@ -6,6 +6,8 @@ import { saveRx, type RxFormState } from "@/lib/actions/prescriptions";
 import { toDateInput } from "@/lib/format";
 import DrugPicker, { type Drug } from "@/components/DrugPicker";
 import PatientPicker from "@/components/PatientPicker";
+import Combo from "@/components/Combo";
+import { GENDERS } from "@/lib/patient-constants";
 
 type Line = { drug: string; dose: string; meal: string; duration: string };
 type Doctor = { id: number; name: string };
@@ -121,11 +123,6 @@ export default function RxEditor({
       <input type="hidden" name="drugsJson" value={JSON.stringify(lines)} />
       {CLINICAL.map((c) => <input key={c.key} type="hidden" name={c.key} value={fields[c.key]} />)}
 
-      {/* datalists for Bangla dosing presets */}
-      <datalist id="dosePresets">{DOSE_PRESETS.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="mealPresets">{MEAL_PRESETS.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="durationPresets">{DURATION_PRESETS.map((v) => <option key={v} value={v} />)}</datalist>
-
       {/* header: patient + dentist + date + template */}
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -141,7 +138,8 @@ export default function RxEditor({
               <div className="grid grid-cols-3 gap-2">
                 <input name="randomName" defaultValue={rx?.randomName ?? ""} placeholder="Name" className={inputCls} />
                 <input name="randomAge" defaultValue={rx?.randomAge ?? ""} placeholder="Age" className={inputCls} />
-                <input name="randomSex" defaultValue={rx?.randomSex ?? ""} placeholder="Sex" className={inputCls} />
+                <Combo name="randomSex" options={GENDERS} defaultValue={rx?.randomSex ?? ""}
+                  placeholder="Sex" emptyLabel="—" aria-label="Sex" className={inputCls} />
               </div>
             ) : patient ? (
               <div className="flex items-center justify-between rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800">
@@ -156,10 +154,13 @@ export default function RxEditor({
           <div className="grid grid-cols-2 gap-4">
             <label className="block">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Prescribing doctor</span>
-              <select name="dentistId" defaultValue={rx?.dentistId ?? defaultDentistId ?? ""} className={`mt-1 ${inputCls}`}>
-                <option value="">—</option>
-                {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+              <Combo
+                name="dentistId"
+                options={doctors.map((d) => ({ value: String(d.id), label: d.name }))}
+                defaultValue={String(rx?.dentistId ?? defaultDentistId ?? "")}
+                placeholder="Choose a doctor…" emptyLabel="—"
+                className={`mt-1 ${inputCls}`}
+              />
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Date</span>
@@ -171,10 +172,14 @@ export default function RxEditor({
         {templates.length > 0 && (
           <div className="mt-4 flex items-center gap-2">
             <span className="text-xs text-slate-500 dark:text-slate-400">Load template:</span>
-            <select onChange={(e) => { if (e.target.value) { loadTemplate(e.target.value); e.target.value = ""; } }} defaultValue="" className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              <option value="">Choose…</option>
-              {templates.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
-            </select>
+            <div className="w-64">
+              <Combo
+                options={templates.map((t) => t.name)}
+                value="" onChange={(v) => { if (v) loadTemplate(v); }}
+                placeholder="Choose…" aria-label="Load template"
+                className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              />
+            </div>
           </div>
         )}
       </section>
@@ -208,9 +213,18 @@ export default function RxEditor({
                   <span className="mt-2 w-5 shrink-0 text-center text-xs text-slate-400">{i + 1}.</span>
                   <div className="grid flex-1 gap-2 sm:grid-cols-12">
                     <input value={l.drug} onChange={(e) => updateLine(i, { drug: e.target.value })} placeholder="Drug" className={`sm:col-span-5 ${inputCls}`} />
-                    <input value={l.dose} onChange={(e) => updateLine(i, { dose: e.target.value })} list="dosePresets" placeholder="Dose ১+০+১" className={`sm:col-span-3 ${inputCls}`} />
-                    <input value={l.meal} onChange={(e) => updateLine(i, { meal: e.target.value })} list="mealPresets" placeholder="Meal" className={`sm:col-span-2 ${inputCls}`} />
-                    <input value={l.duration} onChange={(e) => updateLine(i, { duration: e.target.value })} list="durationPresets" placeholder="Duration" className={`sm:col-span-2 ${inputCls}`} />
+                    <div className="sm:col-span-3">
+                      <Combo options={DOSE_PRESETS} value={l.dose} onChange={(v) => updateLine(i, { dose: v })}
+                        allowCustom placeholder="Dose ১+০+১" aria-label="Dose" className={inputCls} />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Combo options={MEAL_PRESETS} value={l.meal} onChange={(v) => updateLine(i, { meal: v })}
+                        allowCustom placeholder="Meal" aria-label="Meal" className={inputCls} />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Combo options={DURATION_PRESETS} value={l.duration} onChange={(v) => updateLine(i, { duration: v })}
+                        allowCustom placeholder="Duration" aria-label="Duration" className={inputCls} />
+                    </div>
                   </div>
                   <div className="mt-1 flex shrink-0 flex-col text-slate-400">
                     <button type="button" onClick={() => move(i, -1)} className="px-1 hover:text-slate-700 dark:hover:text-slate-200" aria-label="Move up">▲</button>

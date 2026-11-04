@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useActionState } from "react";
 import { saveLine, type LineFormState } from "@/lib/actions/billing";
 import { toDateInput, taka } from "@/lib/format";
+import Combo from "@/components/Combo";
 
 type LineLike = {
   id: number; treatmentName: string | null; treatmentDate: Date | string | null;
@@ -38,12 +39,14 @@ export default function LineForm({
     <form action={action} className="space-y-4">
       <input type="hidden" name="caseId" value={caseId} />
       {line && <input type="hidden" name="id" value={line.id} />}
-      <datalist id="treatmentCatalog">{treatments.map((t) => <option key={t.name} value={t.name}>{taka(t.price)}</option>)}</datalist>
 
       <div className={`grid gap-3 ${compact ? "sm:grid-cols-6" : "sm:grid-cols-3"}`}>
         <label className={compact ? "sm:col-span-2" : ""}>
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Procedure</span>
-          <input name="treatmentName" list="treatmentCatalog" value={name} onChange={(e) => onName(e.target.value)} placeholder="Search catalog…" className={inputCls} />
+          <Combo name="treatmentName"
+            options={treatments.map((t) => ({ value: t.name, label: t.name, hint: taka(t.price) }))}
+            value={name} onChange={onName} allowCustom
+            placeholder="Search catalog…" aria-label="Procedure" className={inputCls} />
         </label>
         <label>
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Date</span>
@@ -51,10 +54,10 @@ export default function LineForm({
         </label>
         <label>
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Doctor</span>
-          <select name="operatingDoctorId" defaultValue={line?.operatingDoctorId ?? ""} className={inputCls}>
-            <option value="">—</option>
-            {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
+          <Combo name="operatingDoctorId"
+            options={doctors.map((d) => ({ value: String(d.id), label: d.name }))}
+            defaultValue={String(line?.operatingDoctorId ?? "")}
+            placeholder="Choose a doctor…" emptyLabel="—" aria-label="Doctor" className={inputCls} />
         </label>
         <label>
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Amount (৳)</span>

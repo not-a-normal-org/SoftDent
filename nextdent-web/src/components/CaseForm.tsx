@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { saveCase, type CaseFormState } from "@/lib/actions/billing";
+import Combo from "@/components/Combo";
 
 type CaseLike = { id: number; name: string | null; description: string | null; status: string | null; notes: string | null };
 const initial: CaseFormState = {};
@@ -26,11 +27,8 @@ export default function CaseForm({ patientId, treatmentCase, cancelHref }: { pat
           </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Status</span>
-            <select name="status" defaultValue={c?.status ?? "Active"} className={inputCls}>
-              <option>Active</option>
-              <option>Completed</option>
-              <option>On-hold</option>
-            </select>
+            <Combo name="status" options={["Active", "Completed", "On-hold"]}
+              defaultValue={c?.status ?? "Active"} aria-label="Case status" className={inputCls} />
           </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Short description</span>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useActionState } from "react";
 import { saveRxTemplate, type RxTemplateFormState } from "@/lib/actions/rx-templates";
 import DrugPicker, { type Drug } from "@/components/DrugPicker";
+import Combo from "@/components/Combo";
 
 type Line = { drug: string; dose: string; meal: string; duration: string };
 type Tpl = {
@@ -46,9 +47,6 @@ export default function RxTemplateEditor({ template }: { template?: Tpl }) {
     <form action={action} className="space-y-6">
       {t && <input type="hidden" name="id" value={t.id} />}
       <input type="hidden" name="drugsJson" value={JSON.stringify(lines)} />
-      <datalist id="tDose">{DOSE.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="tMeal">{MEAL.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="tDur">{DUR.map((v) => <option key={v} value={v} />)}</datalist>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Template name <span className="text-rose-500">*</span></span>
@@ -68,9 +66,18 @@ export default function RxTemplateEditor({ template }: { template?: Tpl }) {
                 <span className="mt-2 w-5 text-center text-xs text-slate-400">{idx + 1}.</span>
                 <div className="grid flex-1 gap-2 sm:grid-cols-12">
                   <input value={l.drug} onChange={(e) => update(idx, { drug: e.target.value })} placeholder="Drug" className={`sm:col-span-5 ${inputCls} mt-0`} />
-                  <input value={l.dose} onChange={(e) => update(idx, { dose: e.target.value })} list="tDose" placeholder="Dose" className={`sm:col-span-3 ${inputCls} mt-0`} />
-                  <input value={l.meal} onChange={(e) => update(idx, { meal: e.target.value })} list="tMeal" placeholder="Meal" className={`sm:col-span-2 ${inputCls} mt-0`} />
-                  <input value={l.duration} onChange={(e) => update(idx, { duration: e.target.value })} list="tDur" placeholder="Duration" className={`sm:col-span-2 ${inputCls} mt-0`} />
+                  <div className="sm:col-span-3">
+                    <Combo options={DOSE} value={l.dose} onChange={(v) => update(idx, { dose: v })}
+                      allowCustom placeholder="Dose" aria-label="Dose" className={`${inputCls} mt-0`} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Combo options={MEAL} value={l.meal} onChange={(v) => update(idx, { meal: v })}
+                      allowCustom placeholder="Meal" aria-label="Meal" className={`${inputCls} mt-0`} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Combo options={DUR} value={l.duration} onChange={(v) => update(idx, { duration: v })}
+                      allowCustom placeholder="Duration" aria-label="Duration" className={`${inputCls} mt-0`} />
+                  </div>
                 </div>
                 <button type="button" onClick={() => setLines((ls) => ls.filter((_, j) => j !== idx))} className="mt-1 px-1 text-rose-500 hover:text-rose-700">✕</button>
               </li>

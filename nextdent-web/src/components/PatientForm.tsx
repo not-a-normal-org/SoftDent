@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { savePatient, type PatientFormState } from "@/lib/actions/patients";
 import { toDateInput } from "@/lib/format";
 import { GENDERS, MARITAL, type PatientFormLists } from "@/lib/patient-constants";
+import Combo from "@/components/Combo";
 
 type PatientLike = {
   id: number;
@@ -50,23 +51,19 @@ export default function PatientForm({ patient, lists }: { patient?: PatientLike;
           <input name="nickName" defaultValue={p?.nickName ?? ""} className={inputCls} />
         </Field>
         <Field label="Gender">
-          <select name="gender" defaultValue={p?.gender ?? ""} className={inputCls}>
-            <option value="">—</option>
-            {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
+          <Combo name="gender" options={GENDERS} defaultValue={p?.gender ?? ""}
+            placeholder="Select…" emptyLabel="—" aria-label="Gender" className={inputCls} />
         </Field>
         <Field label="Date of birth">
           <input type="date" name="dob" defaultValue={toDateInput(p?.dob)} className={inputCls} />
         </Field>
         <Field label="Marital status">
-          <select name="maritalStatus" defaultValue={p?.maritalStatus ?? ""} className={inputCls}>
-            <option value="">—</option>
-            {MARITAL.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
+          <Combo name="maritalStatus" options={MARITAL} defaultValue={p?.maritalStatus ?? ""}
+            placeholder="Select…" emptyLabel="—" aria-label="Marital status" className={inputCls} />
         </Field>
         <Field label="Occupation">
-          <input name="occupation" list="occupations" defaultValue={p?.occupation ?? ""} className={inputCls} />
-          <datalist id="occupations">{lists.occupations.map((o) => <option key={o} value={o} />)}</datalist>
+          <Combo name="occupation" options={lists.occupations} defaultValue={p?.occupation ?? ""}
+            allowCustom placeholder="Search or type…" emptyLabel="—" aria-label="Occupation" className={inputCls} />
         </Field>
       </Section>
 
@@ -87,10 +84,10 @@ export default function PatientForm({ patient, lists }: { patient?: PatientLike;
 
       <Section title="Care & billing">
         <Field label="Consultant doctor">
-          <select name="consultantDoctorId" defaultValue={p?.consultantDoctorId ?? ""} className={inputCls}>
-            <option value="">Unassigned</option>
-            {lists.doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
+          <Combo name="consultantDoctorId"
+            options={lists.doctors.map((d) => ({ value: String(d.id), label: d.name }))}
+            defaultValue={String(p?.consultantDoctorId ?? "")}
+            placeholder="Unassigned" emptyLabel="Unassigned" aria-label="Consultant doctor" className={inputCls} />
         </Field>
         <Field label="Registered since">
           <input type="date" name="since" defaultValue={toDateInput(p?.since)} className={inputCls} />
@@ -102,8 +99,8 @@ export default function PatientForm({ patient, lists }: { patient?: PatientLike;
 
       <Section title="Emergency contact">
         <Field label="Relation">
-          <input name="emergencyRelation" list="relations" defaultValue={p?.emergencyRelation ?? ""} className={inputCls} />
-          <datalist id="relations">{lists.relations.map((r) => <option key={r} value={r} />)}</datalist>
+          <Combo name="emergencyRelation" options={lists.relations} defaultValue={p?.emergencyRelation ?? ""}
+            allowCustom placeholder="Search or type…" emptyLabel="—" aria-label="Emergency relation" className={inputCls} />
         </Field>
         <Field label="Name">
           <input name="emergencyName" defaultValue={p?.emergencyName ?? ""} className={inputCls} />

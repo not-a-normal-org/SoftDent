@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { sendPatientSms, type SmsState } from "@/lib/actions/sms";
 import { countSegments, renderTemplate, missingPlaceholders, type SmsValues } from "@/lib/sms-text";
 import { fmtDateTime } from "@/lib/format";
+import Combo from "@/components/Combo";
 
 type Template = { key: string | null; name: string; body: string | null };
 type LogRow = {
@@ -101,17 +102,13 @@ export default function PatientSms({
       ) : (
         <form action={action} className="space-y-3">
           <input type="hidden" name="patientId" value={patientId} />
-          <select
+          <Combo
             name="templateKey"
-            value={key}
-            onChange={(e) => pick(e.target.value)}
+            options={templates.map((t) => ({ value: t.key ?? "", label: t.name }))}
+            value={key} onChange={pick}
+            placeholder="Choose a message…" emptyLabel="—" aria-label="Message template"
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-          >
-            <option value="">Choose a message…</option>
-            {templates.map((t) => (
-              <option key={t.key ?? t.name} value={t.key ?? ""}>{t.name}</option>
-            ))}
-          </select>
+          />
 
           {key && (
             <>

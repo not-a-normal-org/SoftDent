@@ -6,6 +6,7 @@ import { saveLabOrder, type LabOrderFormState } from "@/lib/actions/labs";
 import { toDateInput } from "@/lib/format";
 import { LAB_STATUSES, WORK_TYPES } from "@/lib/lab-constants";
 import PatientPicker from "@/components/PatientPicker";
+import Combo from "@/components/Combo";
 
 type Order = {
   id: number; labId: number; workType: string | null; toothFdi: string | null; shade: string | null;
@@ -33,8 +34,6 @@ export default function LabOrderForm({
     <form action={action} className="space-y-4">
       {o && <input type="hidden" name="id" value={o.id} />}
       <input type="hidden" name="patientId" value={patient?.id ?? ""} />
-      <datalist id="workTypes">{WORK_TYPES.map((w) => <option key={w} value={w} />)}</datalist>
-      <datalist id="labShades">{shades.map((s) => <option key={s} value={s} />)}</datalist>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="sm:col-span-2">
@@ -47,16 +46,19 @@ export default function LabOrderForm({
           ) : <div className="mt-1"><PatientPicker onPick={setPatient} /></div>}
         </div>
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Lab <span className="text-rose-500">*</span></span>
-          <select name="labId" defaultValue={o?.labId ?? labs[0]?.id ?? ""} className={inputCls}>
-            {labs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select></label>
+          <Combo name="labId"
+            options={labs.map((l) => ({ value: String(l.id), label: l.name }))}
+            defaultValue={String(o?.labId ?? labs[0]?.id ?? "")}
+            placeholder="Choose a lab…" aria-label="Lab" className={inputCls} /></label>
 
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Work type</span>
-          <input name="workType" list="workTypes" defaultValue={o?.workType ?? ""} className={inputCls} /></label>
+          <Combo name="workType" options={WORK_TYPES} defaultValue={o?.workType ?? ""}
+            allowCustom placeholder="Search or type…" emptyLabel="—" aria-label="Work type" className={inputCls} /></label>
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Tooth (FDI)</span>
           <input name="toothFdi" defaultValue={o?.toothFdi ?? ""} placeholder="e.g. 36" className={inputCls} /></label>
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Shade</span>
-          <input name="shade" list="labShades" defaultValue={o?.shade ?? ""} placeholder="A2" className={inputCls} /></label>
+          <Combo name="shade" options={shades} defaultValue={o?.shade ?? ""}
+            allowCustom placeholder="A2" emptyLabel="—" aria-label="Shade" className={inputCls} /></label>
 
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Sent</span>
           <input type="date" name="sentAt" defaultValue={toDateInput(o?.sentAt) || toDateInput(new Date())} className={inputCls} /></label>
@@ -66,9 +68,9 @@ export default function LabOrderForm({
           <input type="date" name="receivedAt" defaultValue={toDateInput(o?.receivedAt)} className={inputCls} /></label>
 
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Status</span>
-          <select name="status" defaultValue={o?.status ?? "SENT"} className={inputCls}>
-            {LAB_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select></label>
+          <Combo name="status"
+            options={LAB_STATUSES.map((s) => ({ value: s.key, label: s.label }))}
+            defaultValue={o?.status ?? "SENT"} aria-label="Status" className={inputCls} /></label>
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Lab cost (৳)</span>
           <input type="number" name="cost" min="0" defaultValue={o?.cost ?? 0} className={inputCls} /></label>
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Note</span>

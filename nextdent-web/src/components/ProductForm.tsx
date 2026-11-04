@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { saveProduct, type ProductFormState } from "@/lib/actions/inventory";
+import Combo from "@/components/Combo";
 
 type P = { id: number; name: string; category: string | null; unit: string | null; quantity: number; reorderLevel: number; unitPrice: number; vendorId: number | null; note: string | null };
 const initial: ProductFormState = {};
@@ -16,12 +17,12 @@ export default function ProductForm({ product, categories, vendors }: { product?
   return (
     <form action={action} className="space-y-4">
       {p && <input type="hidden" name="id" value={p.id} />}
-      <datalist id="productCategories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="block sm:col-span-2"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Product <span className="text-rose-500">*</span></span>
           <input name="name" defaultValue={p?.name ?? ""} required className={inputCls} /></label>
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Category</span>
-          <input name="category" list="productCategories" defaultValue={p?.category ?? ""} className={inputCls} /></label>
+          <Combo name="category" options={categories} defaultValue={p?.category ?? ""}
+            allowCustom placeholder="Search or type…" emptyLabel="—" aria-label="Category" className={inputCls} /></label>
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Unit</span>
           <input name="unit" defaultValue={p?.unit ?? ""} placeholder="box / piece / ml" className={inputCls} /></label>
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Quantity</span>
@@ -31,10 +32,10 @@ export default function ProductForm({ product, categories, vendors }: { product?
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Unit price (৳)</span>
           <input type="number" name="unitPrice" defaultValue={p?.unitPrice ?? 0} className={inputCls} /></label>
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Vendor</span>
-          <select name="vendorId" defaultValue={p?.vendorId ?? ""} className={inputCls}>
-            <option value="">—</option>
-            {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-          </select></label>
+          <Combo name="vendorId"
+            options={vendors.map((v) => ({ value: String(v.id), label: v.name }))}
+            defaultValue={String(p?.vendorId ?? "")}
+            placeholder="Choose a vendor…" emptyLabel="—" aria-label="Vendor" className={inputCls} /></label>
         <label className="block sm:col-span-3"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Note</span>
           <input name="note" defaultValue={p?.note ?? ""} className={inputCls} /></label>
       </div>

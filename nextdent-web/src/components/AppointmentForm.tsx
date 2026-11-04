@@ -6,6 +6,7 @@ import { saveAppointment, type ApptFormState } from "@/lib/actions/appointments"
 import { toDateInput, toTimeInput } from "@/lib/format";
 import { STATUSES } from "@/lib/appointment-constants";
 import PatientPicker from "@/components/PatientPicker";
+import Combo from "@/components/Combo";
 
 type ApptLike = {
   id: number;
@@ -72,18 +73,16 @@ export default function AppointmentForm({
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Doctor</span>
-            <select name="doctorId" defaultValue={appt?.doctorId ?? doctors[0]?.id ?? ""} className={inputCls}>
-              <option value="">—</option>
-              {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+            <Combo name="doctorId"
+              options={doctors.map((d) => ({ value: String(d.id), label: d.name }))}
+              defaultValue={String(appt?.doctorId ?? doctors[0]?.id ?? "")}
+              placeholder="Choose a doctor…" emptyLabel="—" aria-label="Doctor" className={inputCls} />
           </label>
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Chair / unit</span>
-            <select name="allocatedUnit" defaultValue={appt?.allocatedUnit ?? units[0] ?? ""} className={inputCls}>
-              <option value="">—</option>
-              {units.map((u) => <option key={u} value={u}>{u}</option>)}
-            </select>
+            <Combo name="allocatedUnit" options={units} defaultValue={appt?.allocatedUnit ?? units[0] ?? ""}
+              placeholder="Choose a chair…" emptyLabel="—" aria-label="Chair / unit" className={inputCls} />
           </label>
 
           <label className="block">
@@ -94,19 +93,19 @@ export default function AppointmentForm({
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Status</span>
-            <select name="status" defaultValue={appt?.status ?? "PENDING"} className={inputCls}>
-              {STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-            </select>
+            <Combo name="status"
+              options={STATUSES.map((s) => ({ value: s.key, label: s.label }))}
+              defaultValue={appt?.status ?? "PENDING"} aria-label="Status" className={inputCls} />
           </label>
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Start time</span>
             {slots.length > 0 ? (
-              <select name="startTime" value={start} onChange={(e) => setStart(e.target.value)} className={inputCls}>
-                {/* keep an existing off-grid time selectable */}
-                {start && !slots.includes(start) && <option value={start}>{start}</option>}
-                {slots.map((sl) => <option key={sl} value={sl}>{sl}</option>)}
-              </select>
+              <Combo name="startTime"
+                options={start && !slots.includes(start) ? [start, ...slots] : slots}
+                value={start} onChange={setStart}
+                /* allowCustom keeps an off-grid time typeable, as the old <option> hack did */
+                allowCustom placeholder="Pick a slot…" aria-label="Start time" className={inputCls} />
             ) : (
               <input type="time" name="startTime" value={start} onChange={(e) => setStart(e.target.value)} className={inputCls} />
             )}

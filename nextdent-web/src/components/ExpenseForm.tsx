@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { addExpense, type ExpenseFormState } from "@/lib/actions/finance";
 import { toDateInput } from "@/lib/format";
+import Combo from "@/components/Combo";
 
 const initial: ExpenseFormState = {};
 const inputCls =
@@ -13,7 +14,6 @@ export default function ExpenseForm({ categories }: { categories: string[] }) {
 
   return (
     <form action={action} className="space-y-3">
-      <datalist id="expenseCategories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
       <div className="grid grid-cols-2 gap-3">
         <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Date</span>
           <input type="date" name="date" defaultValue={toDateInput(new Date())} className={inputCls} /></label>
@@ -21,7 +21,8 @@ export default function ExpenseForm({ categories }: { categories: string[] }) {
           <input type="number" name="amount" min="1" required className={inputCls} /></label>
       </div>
       <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Category</span>
-        <input name="category" list="expenseCategories" placeholder="e.g. House Rent" className={inputCls} /></label>
+        <Combo name="category" options={categories} allowCustom
+          placeholder="e.g. House Rent" emptyLabel="—" aria-label="Category" className={inputCls} /></label>
       <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Description</span>
         <input name="description" className={inputCls} /></label>
 

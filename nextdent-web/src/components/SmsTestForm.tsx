@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { sendTestSms, type SmsTestState } from "@/lib/actions/sms";
+import Combo from "@/components/Combo";
 
 type Template = { key: string | null; name: string; body: string | null };
 
@@ -41,19 +42,18 @@ export default function SmsTestForm({ templates }: { templates: Template[] }) {
             placeholder="01XXXXXXXXX"
             className="w-48 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           />
-          <select
-            defaultValue=""
-            onChange={(e) => {
-              const t = templates.find((x) => x.key === e.target.value);
-              if (t?.body) setBody(t.body);
-            }}
-            className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-          >
-            <option value="">Load a template…</option>
-            {templates.filter((t) => t.body).map((t) => (
-              <option key={t.key ?? t.name} value={t.key ?? ""}>{t.name}</option>
-            ))}
-          </select>
+          <div className="min-w-0 flex-1">
+            <Combo
+              options={templates.filter((t) => t.body).map((t) => ({ value: t.key ?? "", label: t.name }))}
+              value=""
+              onChange={(v) => {
+                const t = templates.find((x) => x.key === v);
+                if (t?.body) setBody(t.body);
+              }}
+              placeholder="Load a template…" aria-label="Load a template"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            />
+          </div>
         </div>
 
         <textarea

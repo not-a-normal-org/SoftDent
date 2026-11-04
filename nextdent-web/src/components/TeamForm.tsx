@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useActionState } from "react";
 import { saveStaff, type StaffFormState } from "@/lib/actions/team";
+import Combo from "@/components/Combo";
 
 type Staff = {
   id: number; fullName: string; nickName: string | null; primaryPhone: string | null; email: string | null; activeStatus: boolean;
@@ -51,9 +52,8 @@ export default function TeamForm({ staff }: { staff?: Staff }) {
             <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Username</span>
               <input name="username" defaultValue={staff?.user?.username ?? ""} className={inputCls} /></label>
             <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Role</span>
-              <select name="role" defaultValue={staff?.user?.role ?? "RECEPTIONIST"} className={inputCls}>
-                {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select></label>
+              <Combo name="role" options={[...ROLES]} defaultValue={staff?.user?.role ?? "RECEPTIONIST"}
+                aria-label="Role" className={inputCls} /></label>
             <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">{editing ? "New password" : "Password"}</span>
               <input type="password" name="password" autoComplete="new-password" placeholder={editing ? "leave blank to keep" : ""} className={inputCls} /></label>
           </div>

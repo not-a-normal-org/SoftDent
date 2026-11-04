@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { saveClinicConfig, type ClinicFormState } from "@/lib/actions/settings";
+import Combo from "@/components/Combo";
 
 type Settings = {
   defaultRxType: string | null; autoAddAppointment: boolean; autoCompleteAppointment: boolean;
@@ -25,10 +26,10 @@ export default function ClinicConfigForm({ settings, rxDoc }: { settings: Settin
         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Prescription defaults</h2>
         <div className="mt-3 grid gap-4 sm:grid-cols-3">
           <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Default Rx format</span>
-            <select name="defaultRxType" defaultValue={settings?.defaultRxType ?? "Body"} className={inputCls}>
-              <option value="Body">Body / Short</option>
-              <option value="Full">Full</option>
-            </select></label>
+            <Combo name="defaultRxType"
+              options={[{ value: "Body", label: "Body / Short" }, { value: "Full", label: "Full" }]}
+              defaultValue={settings?.defaultRxType ?? "Body"}
+              aria-label="Default Rx type" className={inputCls} /></label>
           <label className="flex items-center gap-2 pt-7 text-sm text-slate-700 dark:text-slate-300">
             <input type="checkbox" name="autoAddAppointment" defaultChecked={settings?.autoAddAppointment ?? false} /> Auto-add appointment on treatment
           </label>

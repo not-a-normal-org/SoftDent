@@ -3,6 +3,35 @@
 Live: revision `nextdent-00010-fm6` (2026-10-14) — billing paid-amount fix, SMS
 placeholder merge + preview, suggested next-open-day.
 
+## Searchable dropdowns — DONE (2026-11-05)
+
+Every `<select>` and `<datalist>` in the app is now
+[src/components/Combo.tsx](src/components/Combo.tsx), a searchable combobox:
+18 selects and 13 datalists across 13 components, none left.
+
+Why both had to go: a `<select>` cannot be typed into, which is already painful for
+the 76-entry treatment catalog and the 64 addresses; a `<datalist>` can, but the
+browser decides how it filters and how much it shows, Chrome/Safari/Firefox disagree,
+and it cannot show a second column.
+
+Built for lists that grow, since bigger ones are coming:
+- matching is **scored**, not a substring test — word-start beats mid-word, and a
+  subsequence still matches ("extraction multi" finds "Extraction (Multi Root)");
+- only `maxRender` rows (default 100) ever reach the DOM, the rest are counted, so a
+  35,000-entry list opens as fast as a 3-entry one. Verified by temporarily capping
+  a list at 5: 5 rows rendered, "Showing 5 of 29" footer, gone once it narrows.
+
+It posts through a hidden input, so **no server action changed**. `allowCustom`
+replaces the datalists where typing a new value is legitimate (occupation, dose,
+meal, duration, shade, expense/product category).
+
+In the prescription specifically: walk-in **Sex** was a free-text box and is now a
+dropdown, plus prescribing doctor, template loader, and dose/meal/duration.
+
+Still open: **marital status is not a field on a prescription** — only the patient
+record has it (now a dropdown there). Say the word if a prescription should carry
+one; it needs a column and a migration.
+
 ## Barishal data import — DONE (2026-10-14)
 
 The database now holds the **Barishal clinic's real records**, not the Dhaka sample:
