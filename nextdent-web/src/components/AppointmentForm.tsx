@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useActionState } from "react";
 import { saveAppointment, type ApptFormState } from "@/lib/actions/appointments";
-import { toDateInput, toTimeInput } from "@/lib/format";
+import { toDateInput, toTimeInput, clock12 } from "@/lib/format";
 import { STATUSES } from "@/lib/appointment-constants";
 import PatientPicker from "@/components/PatientPicker";
 import Combo from "@/components/Combo";
@@ -42,12 +42,44 @@ export default function AppointmentForm({
   const slots = schedule?.slots ?? [];
   const [date, setDate] = useState<string>(toDateInput(appt?.appointmentDate) || defaultDate || toDateInput(new Date()));
   const [start, setStart] = useState<string>(toTimeInput(appt?.startsAt) || slots[0] || "");
-  // derive end = start + slot length
-  const end = (() => {
-    if (!start) return toTimeInput(appt?.endsAt);
-    const [h, m] = start.split(":").map(Number);
-    const t = h * 60 + m + (schedule?.slotMinutes ?? 30);
-    return `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+
+  const addMinutes = (hhmm: string, mins: number) => {
+    const [h, m] = hhmm.split(":").map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return "";
+    const t = h * 60 + m + mins;
+    // The old `% 24` wrapped a 23:45 start to an end of "00:15", which the action
+    // then paired with the SAME date — storing an end ~23.5 hours before the start.
+    // The form has one date field, so an end on the next calendar day cannot be
+    // expressed here: clamp to the last minute of the day, which still reads as an
+    // odd end the clinician can correct, and never inverts the pair.
+    if (t >= 24 * 60) return "23:59";
+    return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+  };
+
+  // The end used to be derived and read-only, which made a double-length appointment
+  // impossible to book. It still defaults to one slot after the start — that is right
+  // nearly always — but it can now be changed, and goes back to following the start
+  // as soon as the start moves.
+  const [endOverride, setEndOverride] = useState<string | null>(toTimeInput(appt?.endsAt) || null);
+  const derivedEnd = start ? addMinutes(start, schedule?.slotMinutes ?? 30) : toTimeInput(appt?.endsAt);
+  const end = endOverride ?? derivedEnd;
+
+  function onStartChange(v: string) {
+    setStart(v);
+    setEndOverride(null); // the end follows the start again
+  }
+
+  /** Slot labels in AM/PM; the submitted value stays 24-hour. */
+  const asOptions = (list: string[]) => list.map((t) => ({ value: t, label: clock12(t) }));
+  const startOptions = asOptions(start && !slots.includes(start) ? [start, ...slots] : slots);
+  // ends are the slots after the start, plus one slot beyond the last so the final
+  // appointment of the day can be closed off
+  const endCandidates = (() => {
+    const after = slots.filter((t) => !start || t > start);
+    const tail = slots.length ? addMinutes(slots[slots.length - 1], schedule?.slotMinutes ?? 30) : "";
+    const all = [...after, tail].filter(Boolean) as string[];
+    if (end && !all.includes(end)) all.unshift(end);
+    return asOptions([...new Set(all)]);
   })();
   const dow = date ? new Date(`${date}T00:00`).getDay() : -1;
   const closedDay = schedule && dow >= 0 && !schedule.workingDays.includes(dow);
@@ -102,10 +134,9 @@ export default function AppointmentForm({
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Start time</span>
             {slots.length > 0 ? (
               <Combo name="startTime"
-                options={start && !slots.includes(start) ? [start, ...slots] : slots}
-                value={start} onChange={setStart}
-                /* allowCustom keeps an off-grid time typeable, as the old <option> hack did */
-                allowCustom placeholder="Pick a slot…" aria-label="Start time" className={inputCls} />
+                options={startOptions}
+                value={start} onChange={onStartChange}
+                placeholder="Pick a slot…" aria-label="Start time" className={inputCls} />
             ) : (
               <input type="time" name="startTime" value={start} onChange={(e) => setStart(e.target.value)} className={inputCls} />
             )}
@@ -113,7 +144,12 @@ export default function AppointmentForm({
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">End time</span>
-            <input type="time" name="endTime" value={end} readOnly className={`${inputCls} bg-slate-50 dark:bg-slate-800/70`} />
+            {slots.length > 0 ? (
+              <Combo name="endTime" options={endCandidates} value={end} onChange={setEndOverride}
+                placeholder="Pick a slot…" aria-label="End time" className={inputCls} />
+            ) : (
+              <input type="time" name="endTime" value={end} onChange={(e) => setEndOverride(e.target.value)} className={inputCls} />
+            )}
           </label>
 
           <label className="block sm:col-span-2">

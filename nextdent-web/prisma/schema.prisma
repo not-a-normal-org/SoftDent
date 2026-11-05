@@ -289,6 +289,9 @@ model Prescription {
   /// Free-text note on the prescription. The Barishal legacy database carries this as
   /// its own column; the Dhaka one had no equivalent, so it arrived with the import.
   note                        String?
+  /// "en" or "bn" — which language the printed prescription's labels are set in.
+  /// Null means the clinic default. The clinical text itself is whatever was typed.
+  language                    String?
   deletedAt                   DateTime?
   deletedBy                   String?
 
@@ -684,6 +687,24 @@ model Expense {
   id          Int      @id @default(autoincrement())
   date        DateTime
   category    String?
+  description String?
+  amount      Int
+  createdById Int?
+  createdAt   DateTime @default(now())
+
+  @@index([date])
+}
+
+// Income that is not a patient payment (owner re-investment, training fees) — the
+// legacy tbl_RandomIncome, which Access kept beside its expense tables for the same
+// reason this is a table of its own rather than a `kind` column on Expense: every
+// expense query (monthly buckets, recent list, delete) would otherwise need a filter,
+// and the one that forgets it books income as a cost. Category is a closed list, so
+// unlike an expense it is never null — see lib/income-constants.ts.
+model Income {
+  id          Int      @id @default(autoincrement())
+  date        DateTime
+  category    String
   description String?
   amount      Int
   createdById Int?

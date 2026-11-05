@@ -2,9 +2,14 @@
 # Multi-stage build for the NextDent web app (Next.js 16 standalone + Prisma).
 
 FROM node:20-bookworm-slim AS base
-# openssl is required by the Prisma query engine at build & runtime
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+# openssl is required by the Prisma query engine at build & runtime; tzdata so that
+# TZ resolves against the system zone database as well as ICU's copy
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates tzdata \
     && rm -rf /var/lib/apt/lists/*
+# The clinic is in Barishal (UTC+6, no DST) and the app reports by clinic calendar day
+# and month. Containers default to UTC, so set the zone here rather than relying on the
+# host or the platform (Cloud Run sets it too, but the image must not depend on that).
+ENV TZ=Asia/Dhaka
 
 # ---- install dependencies ----
 FROM base AS deps

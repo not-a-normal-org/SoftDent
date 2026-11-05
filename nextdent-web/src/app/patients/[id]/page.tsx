@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPatientProfile } from "@/lib/patients";
+import { RX_VIEW_FIELDS } from "@/lib/rx-fields";
 import { taka, fmtDate, age, initials } from "@/lib/format";
 import DentalChart from "@/components/DentalChart";
 import PatientBilling from "@/components/PatientBilling";
@@ -90,7 +91,7 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
       </section>
 
       {/* full width — the billing table carries eight columns plus an entry row */}
-      <PatientBilling patientId={p.id} cases={cases} />
+      <PatientBilling patientId={p.id} cases={cases} lifetimeDiscount={p.lifetimeDiscount} />
 
       <PatientSms
         patientId={p.id}
@@ -114,27 +115,60 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
               <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-400">No prescriptions issued.</p>
             ) : (
               <div className="space-y-4">
-                {prescriptions.map((rx) => (
-                  <div key={rx.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Rx #{rx.id}</span>
-                      <span className="text-xs text-slate-400 dark:text-slate-500">{fmtDate(rx.rxDate)}</span>
+                {prescriptions.map((rx) => {
+                  // every clinical field that was actually filled in — the profile used
+                  // to show the complaint and the drugs and quietly drop the other nine
+                  const written = RX_VIEW_FIELDS
+                    .map((f) => ({ ...f, value: (rx as unknown as Record<string, unknown>)[f.key] }))
+                    .filter((f) => typeof f.value === "string" && f.value.trim() !== "");
+                  return (
+                    <div key={rx.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Rx #{rx.id}</span>
+                        <span className="flex items-center gap-3 text-xs">
+                          <span className="text-slate-400 dark:text-slate-500">{fmtDate(rx.rxDate)}</span>
+                          <Link href={`/prescriptions/${rx.id}`} className="text-teal-700 hover:underline dark:text-teal-400">open</Link>
+                          <Link href={`/prescriptions/${rx.id}/edit`} className="text-slate-400 hover:text-teal-700 dark:text-slate-500 dark:hover:text-teal-400">edit</Link>
+                        </span>
+                      </div>
+
+                      {written.length > 0 && (
+                        <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                          {written.map((f) => (
+                            <div key={f.key} className={f.full ? "sm:col-span-2" : ""}>
+                              <dt className="text-xs text-slate-400 dark:text-slate-500">{f.label}</dt>
+                              <dd className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">{f.value as string}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
+
+                      {rx.drugs.length > 0 && (
+                        <ol className="mt-3 space-y-1 border-t border-slate-100 pt-2 dark:border-slate-800">
+                          {rx.drugs.map((d, i) => (
+                            <li key={d.id} className="flex flex-wrap gap-x-3 text-sm text-slate-700 dark:text-slate-300">
+                              <span className="w-4 shrink-0 text-right text-xs text-slate-400">{i + 1}.</span>
+                              <span className="font-medium">{d.drug}</span>
+                              {d.dose && <span className="text-slate-500 dark:text-slate-400">{d.dose}</span>}
+                              {d.meal && <span className="text-slate-500 dark:text-slate-400">· {d.meal}</span>}
+                              {d.duration && <span className="text-slate-500 dark:text-slate-400">· {d.duration}</span>}
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+
+                      {rx.followUpDate && (
+                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                          Follow-up: <span className="font-medium">{fmtDate(rx.followUpDate)}</span>
+                        </p>
+                      )}
+
+                      {written.length === 0 && rx.drugs.length === 0 && (
+                        <p className="mt-2 text-sm text-slate-400 dark:text-slate-500">This prescription is empty.</p>
+                      )}
                     </div>
-                    {rx.complaints && <p className="mt-1 text-sm text-slate-600 dark:text-slate-300"><span className="text-slate-400 dark:text-slate-500">Complaints: </span>{rx.complaints}</p>}
-                    {rx.drugs.length > 0 && (
-                      <ul className="mt-2 space-y-1">
-                        {rx.drugs.map((d) => (
-                          <li key={d.id} className="flex flex-wrap gap-x-3 text-sm text-slate-700 dark:text-slate-300">
-                            <span className="font-medium">{d.drug}</span>
-                            {d.dose && <span className="text-slate-500 dark:text-slate-400">{d.dose}</span>}
-                            {d.meal && <span className="text-slate-500 dark:text-slate-400">· {d.meal}</span>}
-                            {d.duration && <span className="text-slate-500 dark:text-slate-400">· {d.duration}</span>}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>

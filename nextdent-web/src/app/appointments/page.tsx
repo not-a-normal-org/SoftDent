@@ -17,7 +17,8 @@ function ApptRow({ appt, showDate = false, quick = false }: { appt: Appt; showDa
   const name = appt.patient?.fullName ?? "—";
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-      <div className="w-24 shrink-0 text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-300">
+      {/* w-36, not w-24: the 12-hour range "3:30 PM–4:00 PM" needs the width */}
+      <div className="w-36 shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-300">
         {showDate ? fmtDate(appt.appointmentDate) : (fmtTime(appt.startsAt) || "—")}
         {!showDate && appt.endsAt ? <span className="font-normal text-slate-400">–{fmtTime(appt.endsAt)}</span> : null}
       </div>

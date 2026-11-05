@@ -57,9 +57,10 @@ export default function Combo({
   required = false,
   className = "",
   maxRender = 100,
+  search,
   "aria-label": ariaLabel,
 }: {
-  options: Input;
+  options?: Input;
   /** renders a hidden input, so the value posts with the surrounding form */
   name?: string;
   /** controlled value; omit for uncontrolled and pass defaultValue instead */
@@ -75,9 +76,15 @@ export default function Combo({
   required?: boolean;
   className?: string;
   maxRender?: number;
+  /**
+   * Fetch candidates from the server instead of filtering a list held in the browser.
+   * For catalogues too big to ship — the drug table alone is 34,914 rows, about 2 MB
+   * of JSON, which no form should be sending to a phone on a Barishal connection.
+   */
+  search?: (query: string) => Promise<readonly (string | ComboOption)[]>;
   "aria-label"?: string;
 }) {
-  const opts = useMemo(() => normalise(options), [options]);
+  const opts = useMemo(() => normalise(options ?? []), [options]);
   const controlled = value !== undefined;
   const [inner, setInner] = useState(defaultValue ?? "");
   const current = controlled ? value : inner;
@@ -85,6 +92,13 @@ export default function Combo({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState<string | null>(null); // null = not being typed in
   const [active, setActive] = useState(0);
+  const [remote, setRemote] = useState<ComboOption[]>([]);
+  // which query `remote` actually answers. Without this the list keeps showing the
+  // PREVIOUS query's rows for the debounce plus the round trip, with row 0
+  // highlighted — long enough for Enter to commit "Paracetamol" into a field the
+  // user had just retyped as "insulin".
+  const [remoteFor, setRemoteFor] = useState("");
+  const [loading, setLoading] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
@@ -92,9 +106,22 @@ export default function Combo({
   const selected = opts.find((o) => o.value === current) ?? null;
   // what the box shows: the typed query while typing, otherwise the chosen label.
   // A custom value that matches no option still shows itself rather than vanishing.
-  const shown = query ?? selected?.label ?? (allowCustom ? current : "");
+  // Show the stored value even when it is not one of the options. 480 patients hold
+  // marital status "Unmarried", which no list offered — the box rendered empty while
+  // the hidden input still posted it, so the field looked unset on a third of the
+  // records and one careless click would overwrite it.
+  const shown = query ?? selected?.label ?? current;
 
   const matches = useMemo(() => {
+    // The server already ranked a remote search; re-sorting it here would only
+    // second-guess a better-informed ordering (the drug search weights by usage).
+    if (search) {
+      const q = (query ?? "").trim();
+      // nothing typed, or the results on hand answer a different query: show no rows
+      // rather than rows that do not match what is in the box
+      if (!q || remoteFor !== q) return { rows: [], total: 0 };
+      return { rows: remote.slice(0, maxRender), total: remote.length };
+    }
     const q = (query ?? "").trim().toLowerCase();
     if (!q) return { rows: opts.slice(0, maxRender), total: opts.length };
     const scored: { o: ComboOption; s: number }[] = [];
@@ -104,7 +131,30 @@ export default function Combo({
     }
     scored.sort((a, b) => a.s - b.s || a.o.label.length - b.o.label.length);
     return { rows: scored.slice(0, maxRender).map((x) => x.o), total: scored.length };
-  }, [opts, query, maxRender]);
+  }, [opts, query, maxRender, search, remote, remoteFor]);
+
+  // debounced remote lookup; the last response wins, earlier ones are discarded
+  const seq = useRef(0);
+  useEffect(() => {
+    if (!search) return;
+    const q = (query ?? "").trim();
+    if (!q) return; // nothing to fetch; `matches` ignores stale results when empty
+    const mine = ++seq.current;
+    // every setState sits inside the timeout, never in the effect body, so this
+    // cannot cascade a render the moment the query changes
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const r = await search(q);
+        if (mine === seq.current) { setRemote(normalise(r)); setRemoteFor(q); }
+      } catch {
+        if (mine === seq.current) { setRemote([]); setRemoteFor(q); }
+      } finally {
+        if (mine === seq.current) setLoading(false);
+      }
+    }, 180);
+    return () => clearTimeout(t);
+  }, [query, search]);
 
   // A new query means the old highlight is meaningless. Adjusted during render
   // rather than in an effect, so the list never paints with a stale row highlighted.
@@ -114,7 +164,10 @@ export default function Combo({
   useEffect(() => {
     if (!open) return;
     const away = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) close(false);
+      // close(true): a click on Save is the commonest way to leave this box, and
+      // discarding what was typed there loses the custom term the picker exists to
+      // allow. Where free text is not allowed, close() still snaps back.
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) close(true);
     };
     document.addEventListener("mousedown", away);
     return () => document.removeEventListener("mousedown", away);
@@ -165,7 +218,6 @@ export default function Combo({
     <div ref={boxRef} className="relative">
       {name && <input type="hidden" name={name} value={current} />}
       <input
-        ref={inputRef}
         type="text"
         role="combobox"
         aria-expanded={open}
@@ -177,7 +229,14 @@ export default function Combo({
         disabled={disabled}
         // `required` lives on the visible box so the browser can focus it; the hidden
         // input cannot be focused and would make the form unsubmittable in silence.
-        required={required && !current}
+        // Validity is mirrored from `current` (what actually posts), not from the text
+        // on screen — otherwise typing something that matches nothing satisfies the
+        // browser while an empty value is submitted.
+        required={required}
+        ref={(el) => {
+          inputRef.current = el;
+          el?.setCustomValidity(required && !current ? "Choose one of the options." : "");
+        }}
         value={shown}
         placeholder={placeholder}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
@@ -186,6 +245,10 @@ export default function Combo({
         onKeyDown={onKey}
         className={`${className || base} pr-8 ${allowCustom ? "" : "cursor-pointer"}`}
       />
+
+      {loading && (
+        <span className="pointer-events-none absolute right-7 top-1/2 block h-3.5 w-3.5 -translate-y-1/2 animate-spin rounded-full border-2 border-slate-300 border-t-teal-500" />
+      )}
 
       {/* clear, when there is something to clear and a blank is a legal value */}
       {emptyLabel && current && !disabled ? (
@@ -240,7 +303,13 @@ export default function Combo({
 
             {matches.rows.length === 0 && (
               <li className="px-3 py-3 text-center text-sm text-slate-500 dark:text-slate-400">
-                {allowCustom ? `Press Enter to use “${(query ?? "").trim()}”` : "Nothing matches"}
+                {loading || (search && (query ?? "").trim() !== "" && remoteFor !== (query ?? "").trim())
+                  ? "Searching…"
+                  : search && !(query ?? "").trim()
+                    ? "Type to search"
+                    : allowCustom
+                      ? `Press Enter to use “${(query ?? "").trim()}”`
+                      : "Nothing matches"}
               </li>
             )}
           </ul>

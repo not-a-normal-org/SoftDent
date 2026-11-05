@@ -20,7 +20,8 @@ function Row({ appt }: { appt: Appt }) {
         href={`/patients/${appt.patient.id}`}
         className="flex items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
       >
-        <span className="w-14 shrink-0 text-right text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+        {/* w-20, not w-14: "10:30 AM" does not fit the width "10:30" needed */}
+        <span className="w-20 shrink-0 whitespace-nowrap text-right text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">
           {fmtTime(appt.startsAt) || "—"}
         </span>
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-teal-50 text-[11px] font-semibold text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">

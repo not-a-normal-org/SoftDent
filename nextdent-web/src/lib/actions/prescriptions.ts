@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
+import { asRxLang } from "@/lib/rx-language";
 
 export type RxFormState = { error?: string };
 
@@ -62,6 +63,7 @@ export async function saveRx(_prev: RxFormState, fd: FormData): Promise<RxFormSt
     provisionalDiagnosis: str(fd, "provisionalDiagnosis"),
     differentialDiagnosis: str(fd, "differentialDiagnosis"),
     investigationAdvised: str(fd, "investigationAdvised"),
+    investigationInterpretation: str(fd, "investigationInterpretation"),
     confirmatoryDiagnosis: str(fd, "confirmatoryDiagnosis"),
     treatmentPlan: str(fd, "treatmentPlan"),
     procedurePerformed: str(fd, "procedurePerformed"),
@@ -71,6 +73,7 @@ export async function saveRx(_prev: RxFormState, fd: FormData): Promise<RxFormSt
     randomName: anonymous ? str(fd, "randomName") : null,
     randomAge: anonymous ? str(fd, "randomAge") : null,
     randomSex: anonymous ? str(fd, "randomSex") : null,
+    language: asRxLang(str(fd, "language")),
   };
 
   let rxId: number;

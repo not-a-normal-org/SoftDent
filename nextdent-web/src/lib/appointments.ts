@@ -1,9 +1,17 @@
 import "server-only";
 import { prisma } from "./prisma";
 import { CLOSED_STATUSES } from "./appointment-constants";
+import { fromDateInput, toDateInput } from "./format";
 
+/**
+ * The clinic's calendar day containing `date`, as an instant range.
+ *
+ * Host-local before, which paired with a host-local `combine()` and so happened to
+ * work while the host was Dhaka. Both sides now reckon in Asia/Dhaka explicitly, so
+ * the schedule is the same whatever machine serves it.
+ */
 const dayRange = (date: Date) => {
-  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const start = fromDateInput(toDateInput(date), "00:00")!;
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   return { start, end };
 };

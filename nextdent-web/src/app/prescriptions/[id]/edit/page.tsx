@@ -24,6 +24,7 @@ export default async function EditPrescriptionPage({ params }: { params: Promise
         initialPatient={rx.patient ? { id: rx.patient.id, name: rx.patient.fullName } : null}
         doctors={data.doctors}
         templates={data.templates}
+        medicalTerms={data.medicalTerms}
       />
     </div>
   );

@@ -7,6 +7,7 @@ const actionChip: Record<string, string> = {
   update: "bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300",
   delete: "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300",
   status: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300",
+  stock: "bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300",
   login: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
 };
 

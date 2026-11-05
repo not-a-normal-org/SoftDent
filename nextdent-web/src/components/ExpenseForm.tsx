@@ -1,11 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
-import { addExpense, type ExpenseFormState } from "@/lib/actions/finance";
+import { addExpense, type FinanceFormState } from "@/lib/actions/finance";
 import { toDateInput } from "@/lib/format";
 import Combo from "@/components/Combo";
 
-const initial: ExpenseFormState = {};
+const initial: FinanceFormState = {};
 const inputCls =
   "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
 

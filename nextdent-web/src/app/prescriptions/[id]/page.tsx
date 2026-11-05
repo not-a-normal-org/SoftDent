@@ -8,6 +8,8 @@ import { formatRxText } from "@/lib/rx-safety";
 import { softDeleteRx } from "@/lib/actions/prescriptions";
 import { fmtDate, age } from "@/lib/format";
 import RxPrintMode from "@/components/RxPrintMode";
+import { RX_LABELS, asRxLang } from "@/lib/rx-language";
+import { parseTerms } from "@/lib/history-terms";
 
 export default async function PrescriptionViewPage({ params }: { params: Promise<{ id: string }> }) {
   await requireUser();
@@ -34,22 +36,31 @@ export default async function PrescriptionViewPage({ params }: { params: Promise
   // legacy Access import stored the registration number as a float ("5790.0")
   const regNo = dentist?.regNo?.replace(/\.0+$/, "");
 
-  // The clinic's stationery has exactly these seven headings, always printed, in this
-  // order. Fields it has no heading for go under the nearest one rather than being
-  // dropped from the paper.
+  // The clinic's stationery headings, always printed, in the consultant's own order of
+  // consultation: complaint, history, examination, investigation, diagnosis, plan,
+  // what was done. Fields the stationery has no heading for go under the nearest one
+  // rather than being dropped from the paper — which is why the provisional and
+  // differential diagnoses sit as lines under Diagnosis, where the confirmed one is.
+  const L = RX_LABELS[asRxLang(rx.language)];
   const notes: [string, (string | null)[]][] = [
-    ["C/C", [rx.complaints]],
-    ["Known Case of", [rx.medicalHistory, rx.drugHistory && `Drug history: ${rx.drugHistory}`]],
-    ["O/E", [rx.findingsOnExamination]],
-    ["Investigations", [rx.investigationAdvised]],
-    ["Diagnosis", [
-      rx.confirmatoryDiagnosis,
+    [L.complaints, [rx.complaints]],
+    [L.knownCase, [rx.medicalHistory, rx.drugHistory && `${L.drugHistory}: ${rx.drugHistory}`]],
+    [L.onExamination, [rx.findingsOnExamination]],
+    [L.investigations, [rx.investigationAdvised]],
+    [L.investigationFindings, [rx.investigationInterpretation]],
+    [L.diagnosis, [
       rx.provisionalDiagnosis && `Provisional: ${rx.provisionalDiagnosis}`,
       rx.differentialDiagnosis && `D/D: ${rx.differentialDiagnosis}`,
+      rx.confirmatoryDiagnosis,
     ]],
-    ["Treatment Plan", [rx.treatmentPlan]],
-    ["Treatment Done", [rx.procedurePerformed]],
+    [L.treatmentPlan, [rx.treatmentPlan]],
+    [L.treatmentDone, [rx.procedurePerformed]],
   ];
+
+  // Advice picked from the clinic's list posts as "• line • line"; the post-extraction
+  // instructions are seven full sentences, so each gets its own printed line. Advice
+  // typed as prose has no bullets and is left exactly as it was written.
+  const advise = rx.advise?.includes("\u2022") ? parseTerms(rx.advise).join("\n") : rx.advise;
 
   return (
     <div className="space-y-4">
@@ -96,10 +107,10 @@ export default async function PrescriptionViewPage({ params }: { params: Promise
 
           {/* columns sit where the stationery prints them: x = 60, 275, 356, 457pt */}
           <div className="rx-patient">
-            <div style={{ left: "42.4pt", width: "210pt" }}><b>Name:</b>{name}</div>
-            <div style={{ left: "256.6pt", width: "78pt" }}><b>Sex:</b>{sex}</div>
-            <div style={{ left: "337.7pt", width: "98pt" }}><b>Age:</b>{patientAge}</div>
-            <div style={{ left: "439pt", width: "118pt" }}><b>Date:</b>{fmtDate(rx.rxDate)}</div>
+            <div style={{ left: "42.4pt", width: "210pt" }}><b>{L.name}:</b>{name}</div>
+            <div style={{ left: "256.6pt", width: "78pt" }}><b>{L.sex}:</b>{sex}</div>
+            <div style={{ left: "337.7pt", width: "98pt" }}><b>{L.age}:</b>{patientAge}</div>
+            <div style={{ left: "439pt", width: "118pt" }}><b>{L.date}:</b>{fmtDate(rx.rxDate)}</div>
           </div>
 
           <div className="rx-body">
@@ -138,15 +149,15 @@ export default async function PrescriptionViewPage({ params }: { params: Promise
 
               {/* Advice reads as guidance to the patient, so it gets the stationery's own
                   heading style rather than colour — prescriptions get photocopied. */}
-              {rx.advise && (
+              {advise && (
                 <div className="rx-extra">
-                  <div className="rx-note-label">Advice</div>
-                  <div className="rx-note-text bn">{rx.advise}</div>
+                  <div className="rx-note-label">{L.advice}</div>
+                  <div className="rx-note-text bn">{advise}</div>
                 </div>
               )}
               {(rx.followUpDate || rx.followUpReason) && (
                 <div className="rx-extra">
-                  <b>Follow-up: </b>
+                  <b>{L.followUp}: </b>
                   {fmtDate(rx.followUpDate)}{rx.followUpReason ? ` — ${rx.followUpReason}` : ""}
                 </div>
               )}

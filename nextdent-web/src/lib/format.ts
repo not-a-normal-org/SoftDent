@@ -36,10 +36,13 @@ export const fmtDate = (d: Date | string | null | undefined) => {
 export const fmtDateTime = (d: Date | string | null | undefined) => {
   const x = D(d);
   if (!x || isNaN(+x)) return "—";
+  // en-GB for the date, because Bangladesh writes the day first — en-US would give
+  // "Nov 05, 2026". Its meridiem is lower case though, and fmtTime's is upper, so it
+  // is raised here rather than showing two casings on one screen.
   return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
-    timeZone: CLINIC_TZ, hourCycle: "h23",
-  }).format(x);
+    day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit",
+    timeZone: CLINIC_TZ, hour12: true,
+  }).format(x).replace(/\b(am|pm)\b/g, (m) => m.toUpperCase());
 };
 
 // Date → "yyyy-MM-dd" for <input type="date"> default values
@@ -48,6 +51,28 @@ export const toDateInput = (d: Date | string | null | undefined) => {
   if (!x || isNaN(+x)) return "";
   const { y, m, d: day } = clinicParts(x);
   return `${y}-${m}-${day}`;
+};
+
+/**
+ * "yyyy-MM-dd" from an <input type="date"> → the instant that day starts in the clinic.
+ *
+ * `new Date("2026-11-05")` is midnight *UTC*, i.e. 6am in Dhaka, so a day typed here
+ * and read back through `fmtDate` on a host behind UTC comes out as the day before.
+ * The offset is read from the zone database rather than hardcoded as +06.
+ */
+export const fromDateInput = (s: string | null | undefined, time?: string | null): Date | null => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((s ?? "").trim());
+  if (!m) return null;
+  // optional "HH:MM" from an <input type="time">, so a date and a time typed in the
+  // clinic resolve to the instant its own clock showed — not the host's
+  const t = /^(\d{1,2}):(\d{2})/.exec((time ?? "").trim());
+  const hh = t ? Math.min(23, +t[1]) : 0;
+  const mi = t ? Math.min(59, +t[2]) : 0;
+  const asUtc = Date.UTC(+m[1], +m[2] - 1, +m[3], hh, mi);
+  const p = clinicParts(new Date(asUtc));
+  const offset = Date.UTC(+p.y, +p.m - 1, +p.d, +p.hh, +p.mi) - asUtc;
+  const x = new Date(asUtc - offset);
+  return isNaN(+x) ? null : x;
 };
 
 // Date → "HH:MM" for <input type="time"> default values
@@ -61,7 +86,7 @@ export const toTimeInput = (d: Date | string | null | undefined) => {
 export const fmtTime = (d: Date | string | null | undefined) => {
   const x = D(d);
   if (!x || isNaN(+x)) return "";
-  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: CLINIC_TZ, hourCycle: "h23" }).format(x);
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: CLINIC_TZ, hour12: true }).format(x);
 };
 
 export const age = (dob: Date | string | null | undefined) => {
@@ -95,3 +120,17 @@ export function parseTeeth(text?: string | null): string[] {
   }
   return [...out];
 }
+
+/**
+ * "15:30" → "3:30 PM". For the appointment slots, which are wall-clock strings with
+ * no date attached, so they cannot go through Intl's date formatting. The 24-hour
+ * form stays the stored and submitted value; only the label changes.
+ */
+export const clock12 = (hhmm: string): string => {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hhmm.trim());
+  if (!m) return hhmm;
+  const h = Number(m[1]);
+  const suffix = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${m[2]} ${suffix}`;
+};

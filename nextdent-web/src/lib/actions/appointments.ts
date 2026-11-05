@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
+import { fromDateInput } from "@/lib/format";
 
 export type ApptFormState = { error?: string };
 
@@ -16,10 +17,18 @@ const int = (fd: FormData, k: string) => {
   const n = s ? Number.parseInt(s, 10) : NaN;
   return Number.isFinite(n) ? n : null;
 };
+/**
+ * "2026-11-05" + "15:30" → the instant the clinic's own clock read that.
+ *
+ * `new Date("2026-11-05T15:30")` parses in the HOST's zone. That was right only for
+ * as long as the host happened to be Dhaka; on a UTC machine every appointment moved
+ * six hours. It must change together with `dayRange` in lib/appointments.ts, which
+ * buckets the day — fixing one side alone shifts every appointment into the wrong
+ * day rather than the wrong hour.
+ */
 const combine = (date: string | null, time: string | null) => {
   if (!date) return null;
-  const d = new Date(time ? `${date}T${time}` : date);
-  return isNaN(+d) ? null : d;
+  return fromDateInput(date, time ?? "00:00");
 };
 
 export async function saveAppointment(_prev: ApptFormState, fd: FormData): Promise<ApptFormState> {
@@ -32,13 +41,21 @@ export async function saveAppointment(_prev: ApptFormState, fd: FormData): Promi
   if (!dateStr) return { error: "Pick a date." };
 
   const startsAt = combine(dateStr, str(fd, "startTime"));
+  const endsAt = combine(dateStr, str(fd, "endTime"));
+  // Both times are paired with the one date this form submits, so an end "before" the
+  // start is not an overnight booking — it is an appointment stored ending ~a day
+  // before it begins, which every day view and duration then reads wrong.
+  if (startsAt && endsAt && +endsAt <= +startsAt) {
+    return { error: "The end time must be after the start time." };
+  }
+
   const data = {
     patientId,
     doctorId: int(fd, "doctorId"),
     allocatedUnit: str(fd, "allocatedUnit"),
     appointmentDate: combine(dateStr, null),
     startsAt,
-    endsAt: combine(dateStr, str(fd, "endTime")),
+    endsAt,
     status: str(fd, "status") ?? "PENDING",
     note: str(fd, "note"),
   };

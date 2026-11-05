@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./prisma";
 import { countSegments, type SmsValues } from "./sms-text";
-import { fmtDate, toDateInput, CLINIC_TZ } from "./format";
+import { fmtDate, fmtTime, toDateInput, CLINIC_TZ } from "./format";
 
 // The text maths is pure and the preview needs it in the browser, so it lives in
 // sms-text.ts and is re-exported here — callers keep importing from one place.
@@ -188,16 +188,6 @@ export const getSmsTemplate = (key: string) =>
 export const recentSmsForPatient = (patientId: number) =>
   prisma.smsLog.findMany({ where: { patientId }, orderBy: { sentAt: "desc" }, take: 20 });
 
-/**
- * Times in a patient's message read the way the clinic writes them on its own
- * letterhead ("3PM-7PM"), not the 24-hour form the staff screens use — "8:20 PM",
- * not "20:20".
- */
-const smsTime = (d: Date) =>
-  new Intl.DateTimeFormat("en-US", {
-    hour: "numeric", minute: "2-digit", hour12: true, timeZone: CLINIC_TZ,
-  }).format(d);
-
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /** Day of the week in the clinic's timezone, 0=Sunday — not the server's. */
 const clinicDow = (d: Date) =>
@@ -269,7 +259,7 @@ export async function smsValuesForPatient(
       date: fmtDate(date),
       // Left blank deliberately when nothing is booked: a time is a promise to the
       // patient, and appointmentDate alone carries no time of day either.
-      time: appt?.startsAt ? smsTime(appt.startsAt) : "",
+      time: appt?.startsAt ? fmtTime(appt.startsAt) : "",
       total: String(billed),
       paid: String(paid),
       // a credit balance is not a due — the patient owes nothing

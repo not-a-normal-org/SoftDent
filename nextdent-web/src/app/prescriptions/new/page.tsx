@@ -23,6 +23,7 @@ export default async function NewPrescriptionPage({ searchParams }: { searchPara
       <RxEditor
         doctors={data.doctors}
         templates={data.templates}
+        medicalTerms={data.medicalTerms}
         defaultDentistId={data.doctors[0]?.id ?? null}
         initialPatient={patient ? { id: patient.id, name: patient.fullName } : null}
       />

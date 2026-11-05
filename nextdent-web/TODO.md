@@ -3,6 +3,45 @@
 Live: revision `nextdent-00010-fm6` (2026-10-14) — billing paid-amount fix, SMS
 placeholder merge + preview, suggested next-open-day.
 
+## Audit fixes — DONE (2026-11-05)
+
+A review agent audited the day's work and found 21 issues. The serious ones were
+money, and all were reproduced before and after the fix:
+
+- **The payable box lost money.** Only a *percent* was submitted, and a percent
+  rounded to 0.1% cannot reproduce an arbitrary figure: ৳38,000 of ৳45,000 stored
+  back as ৳37,980. The figure shown is now the figure posted.
+- **A payable typed with no amount saved a ৳0 line**, so ৳15,000 of billed work
+  vanished from the case total, the invoice and the dues report. It is now taken as
+  the price of the procedure.
+- **Editing a line silently wrote off receivables.** 94 lines hold a payable their
+  own discount cannot reproduce (one is ৳20,000 billed against a ৳3,220 amount);
+  recomputing on save wrote ৳16,780 off the moment anyone fixed a typo. The editor
+  now opens showing the *stored* payable, and line edits write before/after into
+  `AuditLog.diff` so an overwritten figure is recoverable.
+- **/finance bucketed months in host time** while rendering dates in Dhaka, and `TZ`
+  was set nowhere in the image. On the UTC container September was under-reported by
+  7.7%. Now identical under UTC, Dhaka and Los Angeles; `TZ=Asia/Dhaka` is set in the
+  Dockerfile and compose as well.
+- **Appointments had the same split**, between `combine()` (write) and `dayRange()`
+  (read). Fixed as a pair — one side alone would have moved every appointment to the
+  wrong day rather than the wrong hour.
+- **Combo** kept the previous query's rows visible during a remote search with row 0
+  highlighted, so Enter could commit the wrong drug; discarded typed free text when
+  you clicked away (including onto Save); and rendered a stored value blank when it
+  matched no option — which is how 480 patients showed an empty marital status.
+  "Unmarried" was missing from the list entirely.
+- Also: `money()` truncated ("100.75" booked ৳100, "1e3" booked ৳1); appointment end
+  times could be stored ~23.5 h *before* the start; drug history swapped duration and
+  since when only a since was given; the medical-history vocabulary offered a
+  109-character drug run as a pickable condition; `composeDrug` and `parseTerms`
+  disagreed on whitespace for 631 catalogue drugs.
+
+Known and deliberately left: `deleteCase`/`deleteLine` need only a signed-in user
+while deleting an expense needs OWNER — worth aligning; the SMS `{time}` token now
+reads "3:00 PM" rather than "15:00" in Bangla messages (3 more characters against the
+70-character segment), which wants clinic sign-off.
+
 ## Searchable dropdowns — DONE (2026-11-05)
 
 Every `<select>` and `<datalist>` in the app is now

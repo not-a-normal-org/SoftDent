@@ -29,6 +29,7 @@ Copy `.env.example` → `.env` and fill in:
 |---|:--:|---|
 | `DATABASE_URL` | ✅ | Postgres connection string; managed providers need `?sslmode=require` |
 | `APP_URL` | ✅ | Public base URL, no trailing slash (used for OAuth redirect) |
+| `TZ` | ✅ | `Asia/Dhaka` — the clinic's zone (UTC+6, no DST). Set in the Dockerfile and the compose `app` service; set it on any other host too |
 | `POSTGRES_PASSWORD` | compose only | Password for the bundled `db` service |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional | Enables the Google Calendar connect flow (gated until set) |
 | `S3_*` | optional | Reserved for patient/case photo & imaging uploads (UI is future work) |
@@ -88,6 +89,11 @@ docker run -p 3000:3000 --env-file .env nextdent-web
 - [ ] Confirm any **Bangladesh data-residency / medical-records** requirements.
 - [ ] Log/monitor (the app writes an audit trail; add infra logs + `GET /api/health` uptime checks).
 - [ ] Harden the Google OAuth `state` (swap the user-id state for a signed nonce) before enabling calendar sync in prod.
+
+## Timezone
+The clinic runs on **Asia/Dhaka** (UTC+6, no DST) while containers default to UTC. Two things keep reports honest:
+- `TZ=Asia/Dhaka` is baked into the image (`ENV TZ` in the Dockerfile) and passed by the compose `app` service; set it on any other platform as well (Cloud Run: `--set-env-vars TZ=Asia/Dhaka`). It is what logs, cron and bare `new Date()` defaults use.
+- The code does not trust it: dates are formatted through `CLINIC_TZ` in `src/lib/format.ts`, and the `/finance` month buckets are derived in that zone, so a UTC host produces the same numbers. Don't reintroduce `getMonth()`/`getFullYear()` for bucketing — on a UTC host an expense dated the 1st (stored at clinic midnight = 18:00Z the day before) falls into the previous month.
 
 ## Notes
 - Migrations are versioned in `prisma/migrations/` — always deploy with `prisma migrate deploy` (never `migrate dev` in prod).

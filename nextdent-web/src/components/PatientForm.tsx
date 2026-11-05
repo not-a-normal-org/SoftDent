@@ -6,6 +6,7 @@ import { savePatient, type PatientFormState } from "@/lib/actions/patients";
 import { toDateInput } from "@/lib/format";
 import { GENDERS, MARITAL, type PatientFormLists } from "@/lib/patient-constants";
 import Combo from "@/components/Combo";
+import { MedicalHistoryField, DrugHistoryField } from "@/components/HistoryFields";
 
 type PatientLike = {
   id: number;
@@ -112,10 +113,10 @@ export default function PatientForm({ patient, lists }: { patient?: PatientLike;
 
       <Section title="Clinical history">
         <Field label="Medical history" className="sm:col-span-3">
-          <textarea name="medicalHistory" defaultValue={p?.medicalHistory ?? ""} rows={2} className={inputCls} />
+          <MedicalHistoryField name="medicalHistory" defaultValue={p?.medicalHistory} options={lists.medicalTerms} />
         </Field>
         <Field label="Drug history" className="sm:col-span-3">
-          <textarea name="drugHistory" defaultValue={p?.drugHistory ?? ""} rows={2} className={inputCls} />
+          <DrugHistoryField name="drugHistory" defaultValue={p?.drugHistory} />
         </Field>
         <Field label="Note" className="sm:col-span-3">
           <textarea name="note" defaultValue={p?.note ?? ""} rows={2} className={inputCls} />

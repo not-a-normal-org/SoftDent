@@ -1,13 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useActionState } from "react";
+import { useMemo, useState, useActionState } from "react";
 import { saveRx, type RxFormState } from "@/lib/actions/prescriptions";
 import { toDateInput } from "@/lib/format";
 import DrugPicker, { type Drug } from "@/components/DrugPicker";
 import PatientPicker from "@/components/PatientPicker";
 import Combo from "@/components/Combo";
 import { GENDERS } from "@/lib/patient-constants";
+import { composeDrug } from "@/lib/drug-format";
+import { RX_FIELDS, type RxField, type RxFieldKey } from "@/lib/rx-fields";
+import { RX_VOCAB, mergeVocab } from "@/lib/rx-vocab";
+import { RX_LANGS, DEFAULT_RX_LANG, asRxLang, type RxLang } from "@/lib/rx-language";
+import { TermPickerField, DrugHistoryField } from "@/components/HistoryFields";
 
 type Line = { drug: string; dose: string; meal: string; duration: string };
 type Doctor = { id: number; name: string };
@@ -22,28 +27,23 @@ type RxLike = {
   id: number; dentistId: number | null; rxDate: Date | string | null;
   followUpDate: Date | string | null; followUpReason: string | null;
   randomName: string | null; randomAge: string | null; randomSex: string | null;
+  language?: string | null;
   drugs: { drug: string | null; dose: string | null; meal: string | null; duration: string | null }[];
 } & Record<string, unknown>;
 
-const CLINICAL: { key: string; label: string; full?: boolean }[] = [
-  { key: "complaints", label: "Chief complaints", full: true },
-  { key: "findingsOnExamination", label: "Findings on examination" },
-  { key: "provisionalDiagnosis", label: "Provisional diagnosis" },
-  { key: "differentialDiagnosis", label: "Differential diagnosis" },
-  { key: "confirmatoryDiagnosis", label: "Confirmatory diagnosis" },
-  { key: "investigationAdvised", label: "Investigation advised" },
-  { key: "treatmentPlan", label: "Treatment plan" },
-  { key: "procedurePerformed", label: "Procedure performed" },
-  { key: "medicalHistory", label: "Medical history" },
-  { key: "drugHistory", label: "Drug history" },
-  { key: "advise", label: "Advice", full: true },
-];
+const CLINICAL = RX_FIELDS;
 
-// Advice is split out of the clinical-notes block: the notes are recorded *before*
-// prescribing (they justify it), while advice is written last, after the medicines.
-const ADVICE_KEY = "advise";
-const NOTES = CLINICAL.filter((c) => c.key !== ADVICE_KEY);
-const ADVICE = CLINICAL.find((c) => c.key === ADVICE_KEY)!;
+// Advice and follow-up are split out of the clinical-notes block: the notes are
+// recorded *before* prescribing (they justify it), while these two are written last,
+// after the medicines.
+const TAIL_KEYS = new Set<RxFieldKey>(["advise", "followUpReason"]);
+const NOTES = CLINICAL.filter((c) => !TAIL_KEYS.has(c.key));
+const ADVICE = CLINICAL.find((c) => c.key === "advise")!;
+const FOLLOW_UP = CLINICAL.find((c) => c.key === "followUpReason")!;
+
+// Every field that renders as a picker posts through its own hidden input, so it has
+// to stay out of the hidden-input loop below or the value would arrive twice.
+const PICKED = new Set<RxFieldKey>(["drugHistory", ...(Object.keys(RX_VOCAB) as RxFieldKey[])]);
 
 const DOSE_PRESETS = ["১+০+১", "১+১+১", "০+০+১", "১+০+০", "½+০+½"];
 const MEAL_PRESETS = ["খাবার পর খাবেন", "খাবার আগে খাবেন", "খাবার সাথে খাবেন"];
@@ -53,24 +53,31 @@ const initial: RxFormState = {};
 const inputCls =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500";
 
-function composeDrug(d: Drug) {
-  const form = d.dosageForm ? `${d.dosageForm}. ` : "";
-  const name = d.brandName ?? d.genericName ?? "";
-  const strength = d.strength ? ` ${d.strength}` : "";
-  return `${form}${name}${strength}`.trim();
-}
-
 export default function RxEditor({
-  rx, initialPatient, doctors, templates, defaultDentistId,
+  rx, initialPatient, doctors, templates, defaultDentistId, medicalTerms = [],
 }: {
   rx?: RxLike;
   initialPatient?: { id: number; name: string } | null;
   doctors: Doctor[];
   templates: Template[];
   defaultDentistId?: number | null;
+  medicalTerms?: string[];
 }) {
   const [state, action, pending] = useActionState(saveRx, initial);
   const editing = !!rx;
+
+  // Which language the printed prescription's labels are set in. Remembered per
+  // browser, because a clinic that prints in Bangla prints in Bangla all day and
+  // should not have to choose it on every prescription.
+  const [lang, setLang] = useState<RxLang>(() => {
+    if (rx) return asRxLang(rx.language);
+    if (typeof window === "undefined") return DEFAULT_RX_LANG;
+    try { return asRxLang(window.localStorage.getItem("rxLang")); } catch { return DEFAULT_RX_LANG; }
+  });
+  function pickLang(v: RxLang) {
+    setLang(v);
+    try { window.localStorage.setItem("rxLang", v); } catch { /* private window */ }
+  }
 
   const [patient, setPatient] = useState<{ id: number; name: string } | null>(initialPatient ?? null);
   // editing an Rx that has no linked patient ⇒ it's an anonymous/walk-in prescription
@@ -96,9 +103,14 @@ export default function RxEditor({
     const c = [...ls]; [c[i], c[j]] = [c[j], c[i]]; return c;
   });
 
+  // Bumped when a template is loaded: the pickers below keep their own state, seeded
+  // once from `fields`, so they have to be remounted to show what the template wrote.
+  const [loadCount, setLoadCount] = useState(0);
+
   function loadTemplate(name: string) {
     const t = templates.find((x) => x.name === name);
     if (!t) return;
+    setLoadCount((n) => n + 1);
     setFields((f) => ({
       ...f,
       complaints: t.complaints ?? f.complaints,
@@ -115,13 +127,40 @@ export default function RxEditor({
       setLines((ls) => [...ls, ...t.drugs.map((d) => ({ drug: d.drug ?? "", dose: d.dose ?? "", meal: d.meal ?? "", duration: d.duration ?? "" }))]);
   }
 
+  // The clinic's own history vocabulary — mined from the records and ranked by use —
+  // widened by the consultant's curated list for anything nobody has typed yet.
+  const medicalOptions = useMemo(() => mergeVocab(medicalTerms, RX_VOCAB.medicalHistory), [medicalTerms]);
+
+  /** A heading with a vocabulary gets a picker; one without stays prose. */
+  function fieldInput(c: RxField) {
+    if (c.key === "drugHistory")
+      return <DrugHistoryField key={`drugHistory-${loadCount}`} name="drugHistory" defaultValue={fields.drugHistory} />;
+    const options = c.key === "medicalHistory" ? medicalOptions : RX_VOCAB[c.key];
+    if (!options)
+      return (
+        <textarea value={fields[c.key]} onChange={(e) => setField(c.key, e.target.value)} rows={2} className={`mt-1 ${inputCls}`} />
+      );
+    return (
+      <TermPickerField
+        key={`${c.key}-${loadCount}`}
+        name={c.key}
+        defaultValue={fields[c.key]}
+        options={options}
+        placeholder={`Add ${c.label.toLowerCase()}…`}
+        ariaLabel={c.label}
+      />
+    );
+  }
+
   return (
     <form action={action} className="space-y-6">
       {editing && <input type="hidden" name="id" value={rx!.id} />}
       <input type="hidden" name="isAnonymous" value={anonymous ? "1" : "0"} />
       <input type="hidden" name="patientId" value={patient?.id ?? ""} />
       <input type="hidden" name="drugsJson" value={JSON.stringify(lines)} />
-      {CLINICAL.map((c) => <input key={c.key} type="hidden" name={c.key} value={fields[c.key]} />)}
+      {CLINICAL.filter((c) => !PICKED.has(c.key)).map((c) => (
+        <input key={c.key} type="hidden" name={c.key} value={fields[c.key]} />
+      ))}
 
       {/* header: patient + dentist + date + template */}
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -166,6 +205,30 @@ export default function RxEditor({
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Date</span>
               <input type="date" name="rxDate" defaultValue={toDateInput(rx?.rxDate) || toDateInput(new Date())} className={`mt-1 ${inputCls}`} />
             </label>
+            <div className="col-span-2">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Print language</span>
+              <input type="hidden" name="language" value={lang} />
+              <div className="mt-1 inline-flex rounded-lg border border-slate-300 p-0.5 dark:border-slate-700">
+                {RX_LANGS.map((l) => (
+                  <button
+                    key={l.value}
+                    type="button"
+                    onClick={() => pickLang(l.value)}
+                    aria-pressed={lang === l.value}
+                    className={`rounded-md px-3 py-1.5 text-sm transition ${
+                      lang === l.value
+                        ? "bg-teal-600 font-medium text-white"
+                        : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                Sets the printed labels only — what you type is printed as you write it.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -189,10 +252,10 @@ export default function RxEditor({
         <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Clinical notes</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           {NOTES.map((c) => (
-            <label key={c.key} className={`block ${c.full ? "sm:col-span-2" : ""}`}>
+            <div key={c.key} className={`block ${c.full ? "sm:col-span-2" : ""}`}>
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{c.label}</span>
-              <textarea value={fields[c.key]} onChange={(e) => setField(c.key, e.target.value)} rows={2} className={`mt-1 ${inputCls}`} />
-            </label>
+              {fieldInput(c)}
+            </div>
           ))}
         </div>
       </section>
@@ -243,18 +306,18 @@ export default function RxEditor({
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Advice &amp; follow-up</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block sm:col-span-2">
+          <div className="block sm:col-span-2">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{ADVICE.label}</span>
-            <textarea value={fields[ADVICE.key]} onChange={(e) => setField(ADVICE.key, e.target.value)} rows={3} className={`mt-1 ${inputCls}`} />
-          </label>
+            {fieldInput(ADVICE)}
+          </div>
           <label className="block">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Follow-up date</span>
             <input type="date" name="followUpDate" defaultValue={toDateInput(rx?.followUpDate)} className={`mt-1 ${inputCls}`} />
           </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Follow-up reason</span>
-            <input name="followUpReason" defaultValue={rx?.followUpReason ?? ""} className={`mt-1 ${inputCls}`} />
-          </label>
+          <div className="block">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{FOLLOW_UP.label}</span>
+            {fieldInput(FOLLOW_UP)}
+          </div>
         </div>
       </section>
 

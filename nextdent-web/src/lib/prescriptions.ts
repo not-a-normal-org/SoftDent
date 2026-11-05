@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
+import { medicalHistoryTerms } from "./clinical-vocab";
 
 export type DrugHit = {
   id: number;
@@ -147,15 +148,17 @@ export function getPrescription(id: number) {
 
 /** Options + context for the Rx editor. */
 export async function getRxEditorData() {
-  const [doctors, templates, settings] = await Promise.all([
+  const [doctors, templates, settings, medicalTerms] = await Promise.all([
     prisma.doctor.findMany({ include: { person: true }, orderBy: { id: "asc" } }),
     prisma.rxTemplate.findMany({ orderBy: { name: "asc" }, include: { drugs: { orderBy: { sortOrder: "asc" } } } }),
     prisma.clinicSetting.findFirst(),
+    medicalHistoryTerms(),
   ]);
   return {
     doctors: doctors.map((d) => ({ id: d.id, name: d.person.fullName })),
     templates,
     defaultRxType: settings?.defaultRxType ?? "Body",
+    medicalTerms,
   };
 }
 
