@@ -5,7 +5,10 @@ import type { NextRequest } from "next/server";
 // it checks for the session cookie's presence (edge-safe, no DB). Real session
 // validation happens in the server components/actions via src/lib/auth.ts.
 const SESSION_COOKIE = "nd_session"; // keep in sync with lib/auth.ts (not imported — that pulls Node-only deps)
-const PUBLIC_PATHS = new Set(["/login"]);
+// /api/health is public on purpose: it is the uptime probe DEPLOY.md points at, and a
+// gated probe redirects to /login and reports the app healthy when the DB is down.
+// It returns only {ok, db} — no patient data, no session, nothing to enumerate.
+const PUBLIC_PATHS = new Set(["/login", "/api/health"]);
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
