@@ -133,12 +133,11 @@ export default async function PrescriptionViewPage({ params }: { params: Promise
               ))}
             </div>
 
-            {/* Medicines on the left, advice and follow-up in their own column on the
-                right, divided by the same hairline as the notes column. The divider and
-                the column exist only when there is advice or a follow-up to put there —
-                an empty column would be the blank heading problem over again. */}
-            <div className={`rx-meds${hasSide ? " rx-meds--split" : ""}`}>
-              <div className="rx-meds-main">
+            {/* Medicines, then advice and follow-up beneath them, divided by a hairline —
+                two columns, as the clinic asked, not three. The divider exists only when
+                there is advice or a follow-up to put under it. */}
+            <div className="rx-meds">
+              <div>
                 <Image src="/rx-mark.png" alt="Rx." width={372} height={190} unoptimized loading="eager" className="rx-mark" />
                 {rx.drugs.length > 0 && (
                   <ol>

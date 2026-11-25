@@ -122,17 +122,16 @@ body {
 .rx-note-label { font-size: 10pt; font-weight: 700; text-decoration: underline; text-underline-offset: 1.5pt; }
 .rx-note-text { margin-top: 3pt; white-space: pre-wrap; }
 
-/* The right side of the body. Split in two when there is advice or a follow-up:
-   medicines keep the wider share (drug names and Bangla dosing are the sheet's longest
-   lines), and the advice column gets the notes column's own hairline, running the
-   full height of the body so it reads as part of the stationery, not a box. */
-.rx-meds { flex: 1; min-width: 0; display: flex; }
-.rx-meds-main { flex: 1; min-width: 0; padding: 16pt 20pt 12pt 5.75pt; }
-.rx-meds--split .rx-meds-main { padding-right: 10pt; }
-.rx-side { flex: 0 0 38%; min-width: 0; background: var(--rx-vline) left / 1px 100% no-repeat; padding: 16pt 16pt 12pt 10pt; }
+/* The right side of the body: medicines, then advice and follow-up below them. The
+   clinic wants two columns, not three, so the advice is set off from the medicines by
+   a stationery hairline across the column rather than a column of its own. */
+/* spacing trimmed so the heaviest real prescription (#1951: eight medicines and long
+   advice) still fits one sheet */
+.rx-meds { flex: 1; min-width: 0; padding: 14pt 20pt 6pt 5.75pt; }
+.rx-side { margin: 9pt 0 0 14pt; padding-top: 7pt; background: var(--rx-hline) top / 100% 1px no-repeat; }
 .rx-mark { width: 35.5pt; height: auto; }
-.rx-meds ol { margin: 10pt 0 0 14pt; }
-.rx-drug { display: flex; gap: 8pt; margin-bottom: 9pt; }
+.rx-meds ol { margin: 8pt 0 0 14pt; }
+.rx-drug { display: flex; gap: 8pt; margin-bottom: 7.5pt; }
 .rx-drug-num { width: 12pt; flex: none; text-align: right; }
 .rx-drug-name { font-size: 12pt; font-weight: 700; }
 .rx-dosing { font-size: 11pt; }

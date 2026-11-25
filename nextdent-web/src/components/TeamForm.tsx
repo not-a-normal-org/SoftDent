@@ -15,9 +15,15 @@ const ROLES = ["OWNER", "DOCTOR", "RECEPTIONIST", "ASSISTANT"];
 const initial: StaffFormState = {};
 const inputCls =
   "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
+// a worked-out value, not an input: grey so nobody tries to type into it
+const readOnlyCls = inputCls.replace("bg-white", "bg-slate-100").replace("dark:bg-slate-800", "dark:bg-slate-900");
 
 export default function TeamForm({ staff }: { staff?: Staff }) {
   const [state, action, pending] = useActionState(saveStaff, initial);
+  const [consultantPct, setConsultantPct] = useState(String(staff?.doctor?.consultantSharePct ?? 20));
+  const [operatorPct, setOperatorPct] = useState(String(staff?.doctor?.operatorSharePct ?? 40));
+  const chamberNum = Math.round((100 - (Number(consultantPct) || 0) - (Number(operatorPct) || 0)) * 10) / 10;
+  const chamberPct = String(chamberNum);
   const [wantLogin, setWantLogin] = useState<boolean>(!!staff?.user);
   const [isDoctor, setIsDoctor] = useState<boolean>(!!staff?.doctor);
   const editing = !!staff;
@@ -79,13 +85,24 @@ export default function TeamForm({ staff }: { staff?: Staff }) {
               <p className="mt-0.5 text-xs text-slate-400">Their cut of a treatment; the clinic (chamber) keeps the remainder.</p>
               <div className="mt-2 grid gap-4 sm:grid-cols-3">
                 <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Consultant share %</span>
-                  <input type="number" step="0.5" min="0" max="100" name="consultantSharePct" defaultValue={staff?.doctor?.consultantSharePct ?? 20} className={inputCls} /></label>
+                  <input type="number" step="0.5" min="0" max="100" name="consultantSharePct" value={consultantPct}
+                    onChange={(e) => setConsultantPct(e.target.value)} className={inputCls} /></label>
                 <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Operator share %</span>
-                  <input type="number" step="0.5" min="0" max="100" name="operatorSharePct" defaultValue={staff?.doctor?.operatorSharePct ?? 40} className={inputCls} /></label>
-                <label className="flex items-center gap-2 pt-7 text-sm text-slate-700 dark:text-slate-300">
-                  <input type="checkbox" name="deductLabBeforeSplit" defaultChecked={staff?.doctor?.deductLabBeforeSplit ?? true} /> Deduct lab cost first
-                </label>
+                  <input type="number" step="0.5" min="0" max="100" name="operatorSharePct" value={operatorPct}
+                    onChange={(e) => setOperatorPct(e.target.value)} className={inputCls} /></label>
+                {/* Not stored: the chamber is paid whatever the doctors' shares leave, so this
+                    is worked out from the two boxes beside it and can never disagree with them. */}
+                <label className="block"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Chamber share %</span>
+                  <input readOnly tabIndex={-1} value={chamberPct}
+                    aria-describedby="chamber-share-hint"
+                    className={`${readOnlyCls} cursor-default tabular-nums ${chamberNum < 0 ? "border-rose-400 text-rose-600 dark:text-rose-400" : ""}`} />
+                  <span id="chamber-share-hint" className={`mt-1 block text-xs ${chamberNum < 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-400"}`}>
+                    {chamberNum < 0 ? "The two shares add up to more than 100%." : "What the clinic keeps when this doctor consults and operates."}
+                  </span></label>
               </div>
+              <label className="mt-3 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <input type="checkbox" name="deductLabBeforeSplit" defaultChecked={staff?.doctor?.deductLabBeforeSplit ?? true} /> Deduct lab cost first
+              </label>
             </div>
           </>
         )}

@@ -35,6 +35,14 @@ export async function saveStaff(_prev: StaffFormState, fd: FormData): Promise<St
   const role: Role = (ROLES as string[]).includes(roleRaw ?? "") ? (roleRaw as Role) : "RECEPTIONIST";
   const isDoctor = b(fd, "isDoctor");
 
+  // The chamber keeps what the doctors' shares leave, so the shares can never total
+  // more than 100% — past that the payouts page would pay out money never collected.
+  if (isDoctor) {
+    const cons = f(fd, "consultantSharePct", 20), op = f(fd, "operatorSharePct", 40);
+    if (cons < 0 || cons > 100 || op < 0 || op > 100) return { error: "Each share must be between 0 and 100%." };
+    if (cons + op > 100) return { error: `Consultant and operator shares add up to ${cons + op}%, leaving the chamber nothing. Keep them at 100% or less.` };
+  }
+
   try {
     // person
     const personId = id
