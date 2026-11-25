@@ -148,6 +148,7 @@ export default function RxEditor({
         options={options}
         placeholder={`Add ${c.label.toLowerCase()}…`}
         ariaLabel={c.label}
+        rowLabel={c.label}
       />
     );
   }
