@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./prisma";
 import { CLINIC_TZ, fromDateInput } from "./format";
+import { rangeBounds, type DateRange } from "./date-range";
 
 export type MonthBucket = {
   key: string;
@@ -25,7 +26,8 @@ export type LedgerEntry = {
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const RECENT = 20;
+// the ledger lists at most this many entries for a range; the count says when there are more
+const RECENT = 200;
 
 // Local to this file (format.ts exports no cached formatter): bucketing runs over every
 // payment in the window, and building an Intl formatter per row is far slower than one.
@@ -54,20 +56,31 @@ const monthKey = (index: number) => {
   return `${y}-${String(m + 1).padStart(2, "0")}`;
 };
 
-export async function getFinanceOverview(months = 6) {
+/**
+ * The Accounts page. The month chart is a fixed trend of the last `months` months; the
+ * headline figures and the ledger follow the picked date range.
+ */
+export async function getFinanceOverview(range: DateRange, months = 6) {
   const firstMonth = clinicMonthIndex(new Date()) - (months - 1);
   // Clinic midnight on the 1st, i.e. 18:00Z the previous day — not UTC midnight, which
   // is 6am in Dhaka and would drop that day's earlier entries. (`fromDateInput` only
   // returns null for a malformed string, and this one is built here.)
   const start = fromDateInput(`${monthKey(firstMonth)}-01`) ?? new Date(0);
+  // expenses and income are stored at clinic midnight of the day typed (fromDateInput),
+  // so clinic-day bounds take in exactly the days picked
+  const bounds = rangeBounds(range);
+  const inRange = { gte: bounds.start, lt: bounds.end };
 
-  const [payments, expenses, incomes, categories, recentExpenses, recentIncomes] = await Promise.all([
+  const [payments, expenses, incomes, categories, recentExpenses, recentIncomes, paidIn, expenseIn, incomeIn] = await Promise.all([
     prisma.payment.findMany({ where: { paidAt: { gte: start } }, select: { paidAt: true, amount: true } }),
     prisma.expense.findMany({ where: { date: { gte: start } }, select: { date: true, amount: true } }),
     prisma.income.findMany({ where: { date: { gte: start } }, select: { date: true, amount: true } }),
     prisma.expenseCategory.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
-    prisma.expense.findMany({ orderBy: [{ date: "desc" }, { id: "desc" }], take: RECENT }),
-    prisma.income.findMany({ orderBy: [{ date: "desc" }, { id: "desc" }], take: RECENT }),
+    prisma.expense.findMany({ where: { date: inRange }, orderBy: [{ date: "desc" }, { id: "desc" }], take: RECENT }),
+    prisma.income.findMany({ where: { date: inRange }, orderBy: [{ date: "desc" }, { id: "desc" }], take: RECENT }),
+    prisma.payment.aggregate({ where: { paidAt: inRange }, _sum: { amount: true } }),
+    prisma.expense.aggregate({ where: { date: inRange }, _sum: { amount: true }, _count: true }),
+    prisma.income.aggregate({ where: { date: inRange }, _sum: { amount: true }, _count: true }),
   ]);
 
   const buckets: MonthBucket[] = [];
@@ -89,10 +102,15 @@ export async function getFinanceOverview(months = 6) {
     .sort((a, b) => +b.date - +a.date || b.id - a.id)
     .slice(0, RECENT);
 
+  const collected = paidIn._sum.amount ?? 0;
+  const other = incomeIn._sum.amount ?? 0;
+  const expense = expenseIn._sum.amount ?? 0;
   return {
     series: buckets,
-    current: buckets[buckets.length - 1],
+    period: { collected, other, income: collected + other, expense, profit: collected + other - expense },
     categories: categories.map((c) => c.name),
     recent,
+    /** entries in the range, of which `recent` is the newest RECENT */
+    entryCount: expenseIn._count + incomeIn._count,
   };
 }

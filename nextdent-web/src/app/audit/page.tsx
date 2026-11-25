@@ -1,6 +1,9 @@
 import { requireRole } from "@/lib/auth";
 import { getAuditLog } from "@/lib/audit";
 import { fmtDateTime } from "@/lib/format";
+import { clinicToday, parseRange, rangeDates, rangeLabel, rangeQuery } from "@/lib/date-range";
+import DateRangePicker from "@/components/DateRangePicker";
+import Pager from "@/components/Pager";
 
 const actionChip: Record<string, string> = {
   create: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300",
@@ -11,20 +14,35 @@ const actionChip: Record<string, string> = {
   login: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
 };
 
-export default async function AuditPage() {
+export default async function AuditPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; page?: string }> }) {
   await requireRole("OWNER");
-  const rows = await getAuditLog(200);
+  const sp = await searchParams;
+  const today = clinicToday();
+  const range = parseRange(sp, today);
+  const label = rangeLabel(range, today);
+  const { rows, total, page, pages } = await getAuditLog(range, Number.parseInt(sp.page ?? "1", 10) || 1);
+  const pageHref = (n: number) => {
+    const u = new URLSearchParams(rangeQuery(range, today));
+    if (n > 1) u.set("page", String(n));
+    const s = u.toString();
+    return s ? `/audit?${s}` : "/audit";
+  };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">Audit log</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Who changed what, when — last {rows.length} events.</p>
-      </div>
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">Audit log</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Who changed what, when — {total.toLocaleString()} {total === 1 ? "event" : "events"} · {label === rangeDates(range) ? label : `${label}, ${rangeDates(range)}`}.
+          </p>
+        </div>
+        <DateRangePicker value={range} today={today} label="Audit dates" />
+      </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         {rows.length === 0 ? (
-          <p className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">No activity recorded yet.</p>
+          <p className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">No activity recorded in these dates.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -49,6 +67,12 @@ export default async function AuditPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {pages > 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 dark:border-slate-800">
+            <span className="text-xs text-slate-500 dark:text-slate-400">Page {page} of {pages}</span>
+            <Pager page={page} pages={pages} href={pageHref} />
           </div>
         )}
       </section>

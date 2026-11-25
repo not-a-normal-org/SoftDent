@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { medicalHistoryTerms } from "./clinical-vocab";
+import { rangeBounds, type DateRange } from "./date-range";
 
 export type DrugHit = {
   id: number;
@@ -110,29 +111,39 @@ export async function recordDrugUse(drugId: number) {
   });
 }
 
-/** Recent prescriptions or search by patient name / Rx id. */
-export async function listPrescriptions(q?: string) {
-  const term = (q ?? "").trim();
-  const base = {
-    where: { deletedAt: null as Date | null },
-    orderBy: [{ rxDate: "desc" as const }, { id: "desc" as const }],
-    take: 40,
-    include: { patient: { select: { id: true, fullName: true } }, dentist: { include: { person: true } } },
-  };
-  if (!term) return prisma.prescription.findMany(base);
+export const RX_PAGE_SIZE = 40;
 
+/**
+ * Prescriptions written in a date range (null: any date), newest first, optionally
+ * searched by patient name / Rx id, a page at a time. A prescription with no date
+ * (two in the import) belongs to no range, so it shows only under "All time".
+ */
+export async function listPrescriptions(opts: { q?: string; range: DateRange | null; page?: number }) {
+  const term = (opts.q ?? "").trim();
   const asId = Number.parseInt(term, 10);
-  return prisma.prescription.findMany({
-    ...base,
-    where: {
-      deletedAt: null,
+  const bounds = opts.range ? rangeBounds(opts.range) : null;
+  const where: Prisma.PrescriptionWhereInput = {
+    deletedAt: null,
+    ...(bounds ? { rxDate: { gte: bounds.start, lt: bounds.end } } : {}),
+    ...(term ? {
       OR: [
         ...(Number.isFinite(asId) ? [{ id: asId }] : []),
         { patient: { fullName: { contains: term, mode: "insensitive" as const } } },
         { randomName: { contains: term, mode: "insensitive" as const } },
       ],
-    },
+    } : {}),
+  };
+  const total = await prisma.prescription.count({ where });
+  const pages = Math.max(1, Math.ceil(total / RX_PAGE_SIZE));
+  const page = Math.min(Math.max(1, opts.page ?? 1), pages);
+  const rows = await prisma.prescription.findMany({
+    where,
+    orderBy: [{ rxDate: "desc" }, { id: "desc" }],
+    skip: (page - 1) * RX_PAGE_SIZE,
+    take: RX_PAGE_SIZE,
+    include: { patient: { select: { id: true, fullName: true } }, dentist: { include: { person: true } } },
   });
+  return { rows, total, page, pages };
 }
 
 export function getPrescription(id: number) {
