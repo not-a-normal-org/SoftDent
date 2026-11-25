@@ -2,6 +2,9 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { afterDiscountClient } from "./billing-math";
+import { patientSearchSql } from "./patients";
+import { sqlInstant } from "./sql";
+import { rangeBounds, type DateRange } from "./date-range";
 
 export const afterDiscount = afterDiscountClient;
 
@@ -50,18 +53,45 @@ export async function getBillingEditorData() {
   };
 }
 
-export async function getBillingOverview() {
-  const [totals, recentPayments] = await Promise.all([
+export const PAYMENTS_PAGE_SIZE = 50;
+
+/**
+ * The billing tab's headline figures, split by what a date range can mean for them.
+ *
+ * Billed and collected are activity — treatment done and money received on given
+ * days — so they follow the range. Outstanding is a debt that builds up across visits;
+ * "outstanding today" would show only what today's visits left unpaid and hide every
+ * older debt, so it stays all-time, like the patient-balances table.
+ *
+ * Collected is summed from Payment rows by `paidAt`, the same source /finance uses.
+ * The import reconciles exactly (every line's `amountPaid` equals the sum of its
+ * payments), so over all time this agrees with the per-line totals.
+ */
+export async function getBillingOverview(range: DateRange, paymentsPage = 1) {
+  const { start, end } = rangeBounds(range);
+  const paidIn = { paidAt: { gte: start, lt: end } };
+  const [billedIn, collectedIn, allTime] = await Promise.all([
+    prisma.treatmentLine.aggregate({ where: { treatmentDate: { gte: start, lt: end } }, _sum: { afterDiscountAmount: true } }),
+    prisma.payment.aggregate({ where: paidIn, _sum: { amount: true }, _count: true }),
     prisma.treatmentLine.aggregate({ _sum: { afterDiscountAmount: true, amountPaid: true } }),
-    prisma.payment.findMany({
-      orderBy: { paidAt: "desc" },
-      take: 20,
-      include: { treatmentLine: { include: { case: { include: { patient: { select: { id: true, fullName: true } } } } } } },
-    }),
   ]);
-  const billed = totals._sum.afterDiscountAmount ?? 0;
-  const paid = totals._sum.amountPaid ?? 0;
-  return { billed, paid, due: billed - paid, recentPayments };
+  // counted first so a page past the end (a bookmark from a busier range) lands on the last page
+  const total = collectedIn._count;
+  const pages = Math.max(1, Math.ceil(total / PAYMENTS_PAGE_SIZE));
+  const page = Math.min(Math.max(1, paymentsPage), pages);
+  const rows = await prisma.payment.findMany({
+    where: paidIn,
+    orderBy: [{ paidAt: "desc" }, { id: "desc" }],
+    skip: (page - 1) * PAYMENTS_PAGE_SIZE,
+    take: PAYMENTS_PAGE_SIZE,
+    include: { treatmentLine: { include: { case: { include: { patient: { select: { id: true, fullName: true } } } } } } },
+  });
+  return {
+    billed: billedIn._sum.afterDiscountAmount ?? 0,
+    collected: collectedIn._sum.amount ?? 0,
+    due: (allTime._sum.afterDiscountAmount ?? 0) - (allTime._sum.amountPaid ?? 0),
+    payments: { rows, total, page, pages },
+  };
 }
 
 // ── patient balances: the billing tab's full, paged list ──────────────────────
@@ -105,26 +135,13 @@ const DAY = 86_400_000;
 function periodSql(period: BalancePeriod): Prisma.Sql {
   const now = Date.now();
   switch (period) {
-    case "30d": return Prisma.sql`"lastVisit" >= ${new Date(now - 30 * DAY)}`;
-    case "90d": return Prisma.sql`"lastVisit" >= ${new Date(now - 90 * DAY)}`;
-    case "1y": return Prisma.sql`"lastVisit" >= ${new Date(now - 365 * DAY)}`;
+    case "30d": return Prisma.sql`"lastVisit" >= ${sqlInstant(new Date(now - 30 * DAY))}`;
+    case "90d": return Prisma.sql`"lastVisit" >= ${sqlInstant(new Date(now - 90 * DAY))}`;
+    case "1y": return Prisma.sql`"lastVisit" >= ${sqlInstant(new Date(now - 365 * DAY))}`;
     // not seen for a year — the dues least likely to be collected without a call
-    case "older": return Prisma.sql`("lastVisit" < ${new Date(now - 365 * DAY)} OR "lastVisit" IS NULL)`;
+    case "older": return Prisma.sql`("lastVisit" < ${sqlInstant(new Date(now - 365 * DAY))} OR "lastVisit" IS NULL)`;
     default: return Prisma.sql`TRUE`;
   }
-}
-
-/** Same rules as the patient search box: digits match phone or ID, anything else the name. */
-function searchSql(q: string): Prisma.Sql {
-  const term = q.trim();
-  if (!term) return Prisma.sql`TRUE`;
-  if (/^[\d\s-]+$/.test(term)) {
-    const dg = term.replace(/\D/g, "");
-    if (!dg) return Prisma.sql`TRUE`;
-    return Prisma.sql`(p."phoneDigits" LIKE ${"%" + dg + "%"} OR CAST(p.id AS text) = ${dg})`;
-  }
-  const like = `%${term}%`;
-  return Prisma.sql`(p."fullName" ILIKE ${like} OR p."nickName" ILIKE ${like})`;
 }
 
 type BalanceCounts = { [K in BalanceStatus]: number } & { [K in `${BalanceStatus}Due`]: number };
@@ -141,7 +158,7 @@ export async function listPatientBalances(opts: {
     FROM "Patient" p
     JOIN "TreatmentCase" c ON c."patientId" = p.id
     JOIN "TreatmentLine" l ON l."caseId" = c.id
-    WHERE ${searchSql(opts.q)}
+    WHERE ${patientSearchSql(opts.q)}
     GROUP BY p.id, p."fullName", p."primaryPhone"`;
   const period = periodSql(opts.period);
   const dir = opts.dir === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`;

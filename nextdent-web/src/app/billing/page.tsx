@@ -1,12 +1,19 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import {
-  getBillingOverview, listPatientBalances, BALANCE_SORTS, BALANCE_STATUSES, BALANCE_PERIODS, BALANCE_PAGE_SIZE,
+  getBillingOverview, listPatientBalances, BALANCE_SORTS, BALANCE_STATUSES, BALANCE_PERIODS, BALANCE_PAGE_SIZE, PAYMENTS_PAGE_SIZE,
   type BalanceSort, type BalanceStatus, type BalancePeriod,
 } from "@/lib/billing";
 import { taka, fmtDate } from "@/lib/format";
+import { clinicToday, parseRange, rangeDates, rangeLabel, rangeQuery } from "@/lib/date-range";
+import DateRangePicker from "@/components/DateRangePicker";
+import Pager from "@/components/Pager";
 
-type Params = { q?: string; status?: string; period?: string; sort?: string; dir?: string; page?: string };
+// `pp` pages the payments list; `page` stays the balances table's, as it was
+type Params = {
+  q?: string; status?: string; period?: string; sort?: string; dir?: string; page?: string;
+  from?: string; to?: string; date?: string; pp?: string;
+};
 
 const DEFAULTS = { status: "dues", period: "any", sort: "due", dir: "desc" } as const;
 const pick = <T extends string>(v: string | undefined, allowed: readonly T[], dflt: T): T =>
@@ -36,32 +43,44 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const sort = pick(sp.sort, BALANCE_SORTS, DEFAULTS.sort);
   const dir = pick(sp.dir, ["asc", "desc"] as const, DEFAULTS.dir);
   const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
+  const paymentsPage = Math.max(1, Number.parseInt(sp.pp ?? "1", 10) || 1);
+  const today = clinicToday();
+  const range = parseRange(sp, today);
+  const label = rangeLabel(range, today);
 
-  const [{ billed, paid, due, recentPayments }, list] = await Promise.all([
-    getBillingOverview(),
+  const [{ billed, collected, due, payments }, list] = await Promise.all([
+    getBillingOverview(range, paymentsPage),
     listPatientBalances({ q, status, period, sort, dir, page }),
   ]);
 
   // Every link rebuilds the URL from the current state plus one change, and drops
   // anything at its default, so the address stays short and shareable. Changing a
-  // filter, search or sort returns to page 1; only the pager moves pages.
-  const current = { q, status, period, sort, dir };
-  const href = (change: Partial<typeof current> & { page?: number }) => {
-    const next = { ...current, page: 1, ...change };
+  // filter, search or sort returns to page 1; only the pager moves pages. The date
+  // range and the payments page ride along on every link, and the payments pager
+  // leaves the balances table where it was: the two lists page independently.
+  const current = { q, status, period, sort, dir, page: list.page, pp: payments.page };
+  const build = (next: typeof current, hash: string) => {
     const u = new URLSearchParams();
     if (next.q) u.set("q", next.q);
     for (const k of ["status", "period", "sort", "dir"] as const) if (next[k] !== DEFAULTS[k]) u.set(k, next[k]);
     if (next.page > 1) u.set("page", String(next.page));
+    for (const [k, v] of Object.entries(rangeQuery(range, today))) u.set(k, v);
+    if (next.pp > 1) u.set("pp", String(next.pp));
     const s = u.toString();
-    return s ? `/billing?${s}#balances` : "/billing#balances";
+    return s ? `/billing?${s}${hash}` : `/billing${hash}`;
   };
+  const href = (change: Partial<Omit<typeof current, "pp">>) => build({ ...current, page: 1, ...change }, "#balances");
+  const paymentsHref = (n: number) => build({ ...current, pp: n }, "#payments");
   const sortHref = (col: BalanceSort) =>
     href({ sort: col, dir: sort === col ? (dir === "asc" ? "desc" : "asc") : FIRST_DIR[col] });
 
+  // Which figures follow the dates is spelled out on each tile: billed and collected
+  // are what happened on those days; outstanding is every unpaid balance, whenever it
+  // was run up (see getBillingOverview).
   const kpis = [
-    { label: "Total billed", value: taka(billed), tone: "bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-200" },
-    { label: "Collected", value: taka(paid), tone: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
-    { label: "Outstanding", value: taka(due), tone: "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300" },
+    { label: "Billed", scope: label, value: taka(billed), href: null, tone: "bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-200" },
+    { label: "Collected", scope: label, value: taka(collected), href: "#payments", tone: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
+    { label: "Outstanding", scope: "All time", value: taka(due), href: "#balances", tone: "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300" },
   ];
 
   const from = list.total === 0 ? 0 : (list.page - 1) * BALANCE_PAGE_SIZE + 1;
@@ -73,21 +92,38 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">Treatment & Billing</h1>
-
-      <section className="grid grid-cols-3 gap-3">
-        {kpis.map((k) => (
-          <div key={k.label} className={`rounded-2xl border border-slate-200 p-4 shadow-sm dark:border-slate-800 ${k.tone}`}>
-            <div className="text-xs font-medium uppercase tracking-wide opacity-70">{k.label}</div>
-            <div className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl">{k.value}</div>
-          </div>
-        ))}
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">Treatment & Billing</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            The dates set what was billed and collected, and the payments listed. Outstanding and patient balances are all time.
+          </p>
+        </div>
+        <DateRangePicker value={range} today={today} reset={["pp"]} label="Billing dates" />
+        {/* three abreast leave ~65px a tile on a phone, too narrow for "৳2,112,900" */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {kpis.map((k, i) => {
+            const span = i === kpis.length - 1 ? "col-span-2 sm:col-span-1" : "";
+            const tile = (
+              <div className={`h-full rounded-2xl border border-slate-200 p-4 shadow-sm dark:border-slate-800 ${k.tone}`}>
+                <div className="text-xs font-medium uppercase tracking-wide opacity-70">{k.label}</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl">{k.value}</div>
+                <div className="mt-0.5 text-[11px] opacity-70">{k.scope}</div>
+              </div>
+            );
+            return k.href
+              ? <Link key={k.label} href={k.href} className={`block ${span}`}>{tile}</Link>
+              : <div key={k.label} className={span}>{tile}</div>;
+          })}
+        </div>
       </section>
 
       <section id="balances" className="scroll-mt-20 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="space-y-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Patient balances</h2>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Patient balances <span className="font-normal text-slate-400 dark:text-slate-500">· all time</span>
+            </h2>
             <span className="text-xs text-slate-500 dark:text-slate-400">
               {list.total.toLocaleString()} {list.total === 1 ? "patient" : "patients"}
               {status !== "paid" && <> · <span className={`font-medium tabular-nums ${dueTone(list.totalDue)}`}>{dueText(list.totalDue)}</span> {list.totalDue < 0 ? "held" : "outstanding"}</>}
@@ -100,6 +136,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             {period !== DEFAULTS.period && <input type="hidden" name="period" value={period} />}
             {sort !== DEFAULTS.sort && <input type="hidden" name="sort" value={sort} />}
             {dir !== DEFAULTS.dir && <input type="hidden" name="dir" value={dir} />}
+            {Object.entries(rangeQuery(range, today)).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
+            {payments.page > 1 && <input type="hidden" name="pp" value={payments.page} />}
             <input name="q" defaultValue={q} placeholder="Search by name, phone or patient ID…" aria-label="Search patients"
               className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500" />
             <button className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700">Search</button>
@@ -171,11 +209,18 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         )}
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-900 dark:border-slate-800 dark:text-slate-100">Recent payments</h2>
-        {recentPayments.length === 0 ? <p className="px-5 py-6 text-center text-sm text-slate-500 dark:text-slate-400">No payments recorded.</p> : (
+      <section id="payments" className="scroll-mt-20 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 px-5 py-3 dark:border-slate-800">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            Payments <span className="font-normal text-slate-400 dark:text-slate-500">· {label === rangeDates(range) ? label : `${label}, ${rangeDates(range)}`}</span>
+          </h2>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {payments.total.toLocaleString()} {payments.total === 1 ? "payment" : "payments"} · <span className="font-medium tabular-nums text-emerald-600 dark:text-emerald-400">{taka(collected)}</span>
+          </span>
+        </div>
+        {payments.rows.length === 0 ? <p className="px-5 py-6 text-center text-sm text-slate-500 dark:text-slate-400">No payments in these dates.</p> : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {recentPayments.map((p) => {
+            {payments.rows.map((p) => {
               const pat = p.treatmentLine.case.patient;
               return (
                 <li key={p.id} className="flex items-center justify-between px-5 py-2.5 text-sm">
@@ -188,6 +233,14 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               );
             })}
           </ul>
+        )}
+        {payments.pages > 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm dark:border-slate-800">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Showing <span className="tabular-nums">{((payments.page - 1) * PAYMENTS_PAGE_SIZE + 1).toLocaleString()}–{Math.min(payments.page * PAYMENTS_PAGE_SIZE, payments.total).toLocaleString()}</span> of <span className="tabular-nums">{payments.total.toLocaleString()}</span>
+            </span>
+            <Pager page={payments.page} pages={payments.pages} href={paymentsHref} label="Payment pages" />
+          </div>
         )}
       </section>
     </div>
@@ -206,31 +259,5 @@ function SortTh({ label, col, sort, dir, href, right = false }: {
         <span aria-hidden className={active ? "" : "opacity-0"}>{active && dir === "asc" ? "▲" : "▼"}</span>
       </Link>
     </th>
-  );
-}
-
-/** First, last, and the pages around the current one, with gaps shown as "…". */
-function Pager({ page, pages, href }: { page: number; pages: number; href: (n: number) => string }) {
-  const nums = [...new Set([1, page - 2, page - 1, page, page + 1, page + 2, pages])]
-    .filter((n) => n >= 1 && n <= pages).sort((a, b) => a - b);
-  const btn = "grid h-8 min-w-8 place-items-center rounded-md px-2 text-xs tabular-nums";
-  const idle = `${btn} text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800`;
-  return (
-    <nav aria-label="Pages" className="flex items-center gap-1">
-      {page > 1
-        ? <Link href={href(page - 1)} className={idle} aria-label="Previous page">‹</Link>
-        : <span className={`${btn} text-slate-300 dark:text-slate-600`}>‹</span>}
-      {nums.map((n, i) => (
-        <span key={n} className="flex items-center gap-1">
-          {i > 0 && n - nums[i - 1] > 1 && <span className="px-1 text-xs text-slate-400">…</span>}
-          {n === page
-            ? <span className={`${btn} bg-teal-600 font-medium text-white`} aria-current="page">{n}</span>
-            : <Link href={href(n)} className={idle}>{n}</Link>}
-        </span>
-      ))}
-      {page < pages
-        ? <Link href={href(page + 1)} className={idle} aria-label="Next page">›</Link>
-        : <span className={`${btn} text-slate-300 dark:text-slate-600`}>›</span>}
-    </nav>
   );
 }
