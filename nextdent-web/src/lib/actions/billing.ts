@@ -68,6 +68,7 @@ export async function saveLine(_prev: LineFormState, fd: FormData): Promise<Line
   const data = {
     caseId,
     treatmentName: s(fd, "treatmentName"),
+    description: s(fd, "description"),
     treatmentDate: d(fd, "treatmentDate"),
     operatingDoctorId: i(fd, "operatingDoctorId"),
     totalAmount: total,
@@ -226,7 +227,7 @@ export async function addLineInline(_prev: InlineState, fd: FormData): Promise<I
   try {
     const line = await prisma.treatmentLine.create({
       data: {
-        caseId, treatmentName: name, treatmentDate: when,
+        caseId, treatmentName: name, description: s(fd, "description"), treatmentDate: when,
         totalAmount: total, discountPercent: discount,
         afterDiscountAmount: payable, amountPaid: paidNow,
       },
@@ -287,6 +288,7 @@ export async function updateLineInline(lineId: number, _prev: InlineState, fd: F
       where: { id: lineId },
       data: {
         treatmentName: name,
+        description: s(fd, "description"),
         treatmentDate: d(fd, "treatmentDate") ?? line.treatmentDate,
         totalAmount: total,
         discountPercent: discount,
@@ -304,10 +306,13 @@ export async function updateLineInline(lineId: number, _prev: InlineState, fd: F
         actorId: user.id, entity: "line", entityId: String(lineId), action: "update",
         diff: {
           before: {
-            treatmentName: line.treatmentName, totalAmount: line.totalAmount,
+            treatmentName: line.treatmentName, description: line.description, totalAmount: line.totalAmount,
             discountPercent: line.discountPercent, afterDiscountAmount: line.afterDiscountAmount,
           },
-          after: { treatmentName: name, totalAmount: total, discountPercent: discount, afterDiscountAmount: payable },
+          after: {
+            treatmentName: name, description: s(fd, "description"), totalAmount: total,
+            discountPercent: discount, afterDiscountAmount: payable,
+          },
         },
       },
     });

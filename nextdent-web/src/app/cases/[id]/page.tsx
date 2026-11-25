@@ -72,7 +72,7 @@ export default async function CaseManagePage({ params }: { params: Promise<{ id:
                   return (
                     <tr key={l.id} className="border-t border-slate-50 dark:border-slate-800/60">
                       <td className="whitespace-nowrap px-5 py-2 text-slate-500 dark:text-slate-400">{fmtDate(l.treatmentDate)}</td>
-                      <td className="px-5 py-2 text-slate-800 dark:text-slate-200">{l.treatmentName || "—"}{l.operatingDoctor ? <span className="block text-[11px] text-slate-400">{l.operatingDoctor.person.fullName}</span> : null}</td>
+                      <td className="px-5 py-2 text-slate-800 dark:text-slate-200">{l.treatmentName || "—"}{l.description ? <span className="block text-[11px] text-slate-500 dark:text-slate-400">{l.description}</span> : null}{l.operatingDoctor ? <span className="block text-[11px] text-slate-400">{l.operatingDoctor.person.fullName}</span> : null}</td>
                       <td className="px-5 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{taka(l.totalAmount)}</td>
                       <td className="px-5 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{l.discountPercent ? `${l.discountPercent}%` : "—"}</td>
                       <td className="px-5 py-2 text-right tabular-nums font-medium text-slate-800 dark:text-slate-100">{taka(l.afterDiscountAmount)}</td>

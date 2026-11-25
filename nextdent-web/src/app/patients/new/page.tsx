@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { getPatientFormLists } from "@/lib/lookups";
+import { nextPatientId } from "@/lib/patients";
 import PatientForm from "@/components/PatientForm";
 
 export default async function NewPatientPage() {
   await requireUser();
-  const lists = await getPatientFormLists();
+  const [lists, suggestedId] = await Promise.all([getPatientFormLists(), nextPatientId()]);
 
   return (
     <div className="space-y-6">
@@ -13,7 +14,7 @@ export default async function NewPatientPage() {
         ← All patients
       </Link>
       <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">New patient</h1>
-      <PatientForm lists={lists} />
+      <PatientForm lists={lists} suggestedId={suggestedId} />
     </div>
   );
 }

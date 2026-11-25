@@ -88,8 +88,11 @@ body {
 .rx-paper * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
 /* The doctor block stays in flow so a longer one (wrapped degree, extra designation)
-   grows the header instead of running over the rule; 156pt is the stationery's own. */
-.rx-head { position: relative; flex: none; min-height: 156pt; display: flex; justify-content: flex-end; padding: 39.8pt 61.7pt 6pt 0; }
+   grows the header instead of running over the rule; 156pt is the stationery's own.
+   The clinic asked for more room around the header and footer rules than the
+   stationery has: 16pt under the doctor block, the patient row centred in its band,
+   and 14pt between the footer rule and the motto. */
+.rx-head { position: relative; flex: none; min-height: 156pt; display: flex; justify-content: flex-end; padding: 39.8pt 61.7pt 16pt 0; }
 .rx-clinic { position: absolute; left: 60.4pt; top: 43pt; max-width: 172pt; }
 .rx-clinic-name { font-size: 17pt; }
 .rx-clinic-addr { margin-top: 1pt; font-size: 11pt; line-height: 13.75pt; white-space: pre-line; }
@@ -105,18 +108,28 @@ body {
 .rx-foot { margin: 0 19.8pt 0 18pt; }
 
 .rx-patient { position: relative; flex: none; height: 42pt; background: var(--rx-hline) top / 100% 1px no-repeat, var(--rx-hline) bottom / 100% 1px no-repeat; }
-.rx-patient > div { position: absolute; top: 0.6pt; overflow: hidden; }
+/* centred in its band rather than hugging the top rule, so the header rule has air on
+   both sides of it */
+.rx-patient > div { position: absolute; top: 50%; transform: translateY(-50%); overflow: hidden; }
 .rx-patient b { font-weight: 700; margin-right: 4pt; }
 
 /* fills whatever the sheet has left, so the footer rule sits at the stationery's 768pt */
 .rx-body { display: flex; flex: 1 0 auto; }
 .rx-notes { flex: none; width: 216pt; background: var(--rx-vline) right / 1px 100% no-repeat; padding: 9.6pt 8pt 8pt 42.4pt; }
-.rx-note { min-height: 78pt; padding-bottom: 8pt; }
+/* 78pt is the stationery's writing room; the page narrows it when many headings print */
+.rx-note { min-height: var(--rx-note-min, 78pt); padding-bottom: 8pt; }
 .rx-note:last-child { min-height: 0; }
 .rx-note-label { font-size: 10pt; font-weight: 700; text-decoration: underline; text-underline-offset: 1.5pt; }
 .rx-note-text { margin-top: 3pt; white-space: pre-wrap; }
 
-.rx-meds { flex: 1; min-width: 0; padding: 16pt 20pt 12pt 5.75pt; }
+/* The right side of the body. Split in two when there is advice or a follow-up:
+   medicines keep the wider share (drug names and Bangla dosing are the sheet's longest
+   lines), and the advice column gets the notes column's own hairline, running the
+   full height of the body so it reads as part of the stationery, not a box. */
+.rx-meds { flex: 1; min-width: 0; display: flex; }
+.rx-meds-main { flex: 1; min-width: 0; padding: 16pt 20pt 12pt 5.75pt; }
+.rx-meds--split .rx-meds-main { padding-right: 10pt; }
+.rx-side { flex: 0 0 38%; min-width: 0; background: var(--rx-vline) left / 1px 100% no-repeat; padding: 16pt 16pt 12pt 10pt; }
 .rx-mark { width: 35.5pt; height: auto; }
 .rx-meds ol { margin: 10pt 0 0 14pt; }
 .rx-drug { display: flex; gap: 8pt; margin-bottom: 9pt; }
@@ -126,9 +139,9 @@ body {
 /* Dosing mixes English with Bangla: Latin stays in the sheet's Times, and only the
    Bengali glyphs (which Times lacks) fall through to the Bengali face. */
 .rx-paper .bn { font-family: "Times New Roman", Times, var(--font-bengali), serif; }
-.rx-extra { margin: 14pt 0 0 14pt; }
+.rx-extra + .rx-extra { margin-top: 14pt; }
 
-.rx-foot { flex: none; height: 73pt; background: var(--rx-hline) top / 100% 1px no-repeat; padding-top: 6.6pt; text-align: center; font-size: 9pt; font-weight: 700; }
+.rx-foot { flex: none; height: 73pt; background: var(--rx-hline) top / 100% 1px no-repeat; padding-top: 14pt; text-align: center; font-size: 9pt; font-weight: 700; }
 
 /* Bangla runs alongside Latin. Bengali is unicameral and reads smaller and denser at
    the same nominal size, and its matras need more vertical room than Latin descenders,

@@ -70,6 +70,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
                 <td className="whitespace-nowrap py-2 text-slate-500">{fmtDate(l.treatmentDate)}</td>
                 <td className="py-2">
                   {l.treatmentName || "—"}
+                  {l.description && <span className="block text-[11px] text-slate-500">{l.description}</span>}
                   {l.operatingDoctor && <span className="block text-[11px] text-slate-400">{l.operatingDoctor.person.fullName}</span>}
                 </td>
                 <td className="py-2 text-right tabular-nums text-slate-600">{taka(l.totalAmount)}</td>

@@ -2,10 +2,30 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
+import { nextPatientId } from "@/lib/patients";
 
-export type PatientFormState = { error?: string; fieldErrors?: { fullName?: string } };
+export type PatientFormState = {
+  error?: string;
+  fieldErrors?: { fullName?: string; patientID?: string };
+  /** after an ID clash, the free number the form should offer instead */
+  nextPatientID?: number;
+};
+
+const MAX_ID = 2_147_483_647; // Postgres int4
+
+/** Who already holds an ID, phrased for the form — so the clash can be checked, not guessed at. */
+async function idTaken(wanted: number): Promise<PatientFormState | undefined> {
+  const holder = await prisma.patient.findUnique({ where: { id: wanted }, select: { fullName: true } });
+  if (!holder) return undefined;
+  const next = await nextPatientId();
+  return {
+    fieldErrors: { patientID: `Patient ID ${wanted} already belongs to ${holder.fullName}. The next free ID is ${next}.` },
+    nextPatientID: next,
+  };
+}
 
 const str = (fd: FormData, k: string) => {
   const s = String(fd.get(k) ?? "").trim();
@@ -33,6 +53,21 @@ export async function savePatient(_prev: PatientFormState, fd: FormData): Promis
 
   const idRaw = str(fd, "id");
   const id = idRaw ? Number.parseInt(idRaw, 10) : null;
+
+  // patientID is the number the clinic files the patient under, and it IS the record's
+  // key — the #38 in every list, picker, search and URL — so the two can never
+  // disagree. Changing it on an existing patient is one UPDATE: all 14 tables that
+  // point at a patient do so ON UPDATE CASCADE.
+  const wantedRaw = str(fd, "patientID");
+  if (wantedRaw != null && !/^\d+$/.test(wantedRaw))
+    return { fieldErrors: { patientID: "Patient ID must be a whole number." } };
+  const wanted = wantedRaw != null ? Number.parseInt(wantedRaw, 10) : null;
+  if (wanted != null && (wanted < 1 || wanted > MAX_ID))
+    return { fieldErrors: { patientID: "Patient ID must be a positive whole number." } };
+  if (wanted != null && wanted !== id) {
+    const clash = await idTaken(wanted);
+    if (clash) return clash;
+  }
 
   const primaryPhone = str(fd, "primaryPhone");
   const consultantDoctorId = num(fd, "consultantDoctorId");
@@ -71,20 +106,32 @@ export async function savePatient(_prev: PatientFormState, fd: FormData): Promis
       });
       if (!before) return { error: "Patient not found." };
 
-      const updated = await prisma.patient.update({ where: { id }, data });
+      // a blank box keeps the current ID rather than clearing the key
+      const renumber = wanted != null && wanted !== id;
+      const updated = await prisma.patient.update({ where: { id }, data: renumber ? { ...data, id: wanted } : data });
       savedId = updated.id;
 
-      // append-only clinical history: record a version whenever these change
+      // append-only clinical history: record a version whenever these change. Written
+      // against savedId, not id — after a renumber the old ID no longer exists.
       const versions = [];
       if ((before.medicalHistory ?? null) !== (medicalHistory ?? null) && medicalHistory)
-        versions.push({ patientId: id, kind: "MEDICAL" as const, body: medicalHistory, authorId: user.id });
+        versions.push({ patientId: savedId, kind: "MEDICAL" as const, body: medicalHistory, authorId: user.id });
       if ((before.drugHistory ?? null) !== (drugHistory ?? null) && drugHistory)
-        versions.push({ patientId: id, kind: "DRUG" as const, body: drugHistory, authorId: user.id });
+        versions.push({ patientId: savedId, kind: "DRUG" as const, body: drugHistory, authorId: user.id });
       if (versions.length) await prisma.patientHistoryVersion.createMany({ data: versions });
 
-      await prisma.auditLog.create({ data: { actorId: user.id, entity: "patient", entityId: String(id), action: "update" } });
+      // A renumber is logged under the NEW id with the old one in the diff, so the
+      // trail from a paper record carrying the old number is never lost.
+      await prisma.auditLog.create({
+        data: {
+          actorId: user.id, entity: "patient", entityId: String(savedId), action: "update",
+          ...(renumber ? { diff: { before: { patientID: id }, after: { patientID: savedId } } } : {}),
+        },
+      });
     } else {
-      const created = await prisma.patient.create({ data });
+      // A blank box still gets the clinic's next number, never the database counter,
+      // which sits above the import's stray 99999.
+      const created = await prisma.patient.create({ data: { ...data, id: wanted ?? (await nextPatientId()) } });
       savedId = created.id;
 
       const versions = [];
@@ -95,6 +142,15 @@ export async function savePatient(_prev: PatientFormState, fd: FormData): Promis
       await prisma.auditLog.create({ data: { actorId: user.id, entity: "patient", entityId: String(savedId), action: "create" } });
     }
   } catch (e) {
+    // Two people saving the same suggested ID at once: the check above passed for
+    // both, and the database refused the second. Say so, with the next free number.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      const next = await nextPatientId();
+      return {
+        fieldErrors: { patientID: `That Patient ID was just taken by someone else. The next free ID is ${next}.` },
+        nextPatientID: next,
+      };
+    }
     console.error("savePatient failed", e);
     return { error: "Could not save the patient. Please try again." };
   }

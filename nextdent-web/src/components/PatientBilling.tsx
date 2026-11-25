@@ -20,6 +20,10 @@ export type BillingLine = {
   id: number;
   treatmentDate: Date | string | null;
   treatmentName: string | null;
+  // Which tooth the work was done on, in the clinic's own shorthand — "On tooth 36",
+  // "Perforation repair via MTA on 36". 6,419 of the 8,505 imported lines carry one,
+  // and without it a case reads as six identical "Crown Supply" rows.
+  description: string | null;
   totalAmount: number;
   discountPercent: number;
   afterDiscountAmount: number;
@@ -161,6 +165,8 @@ function AddLine({ caseId, lifetimeDiscount }: { caseId: number; lifetimeDiscoun
         </td>
         <td className="px-3 py-2">
           <input name="treatmentName" placeholder="Procedure" form={`line-${caseId}`} className={`${field} w-full`} />
+          <input name="description" placeholder="On tooth…" form={`line-${caseId}`}
+            aria-label="Tooth or detail" className={`${field} mt-1 w-full text-xs`} />
         </td>
         <td className="px-3 py-2">
           <input type="number" name="totalAmount" min="0" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} form={`line-${caseId}`} className={`${field} w-24 text-right`} />
@@ -268,6 +274,7 @@ function LineRow({ line, children }: { line: BillingLine; children: React.ReactN
   const [state, action, pending] = useActionState(updateLineInline.bind(null, line.id), initial);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(line.treatmentName ?? "");
+  const [description, setDescription] = useState(line.description ?? "");
   const [date, setDate] = useState(toDateInput(line.treatmentDate));
   const [amount, setAmount] = useState(String(line.totalAmount));
   const [discount, setDiscount] = useState(String(line.discountPercent || ""));
@@ -299,6 +306,7 @@ function LineRow({ line, children }: { line: BillingLine; children: React.ReactN
     // re-read from the row, so a cancelled edit never leaves stale figures behind,
     // and so a payable that its own discount cannot reproduce is shown as stored
     setName(line.treatmentName ?? "");
+    setDescription(line.description ?? "");
     setDate(toDateInput(line.treatmentDate));
     setAmount(String(line.totalAmount));
     setDiscount(String(line.discountPercent || ""));
@@ -312,7 +320,12 @@ function LineRow({ line, children }: { line: BillingLine; children: React.ReactN
       <>
         <tr className="group border-t border-slate-50 dark:border-slate-800/60">
           <td className="whitespace-nowrap px-3 py-2 text-slate-500 dark:text-slate-400">{fmtDate(line.treatmentDate)}</td>
-          <td className="px-3 py-2 text-slate-800 dark:text-slate-200">{line.treatmentName || "—"}</td>
+          <td className="px-3 py-2 text-slate-800 dark:text-slate-200">
+            {line.treatmentName || "—"}
+            {line.description && (
+              <span className="block text-[11px] text-slate-400 dark:text-slate-500">{line.description}</span>
+            )}
+          </td>
           <td className={`${cell} text-slate-700 dark:text-slate-300`}>{taka(line.totalAmount)}</td>
           <td className={`${cell} text-slate-500 dark:text-slate-400`}>{line.discountPercent ? `${line.discountPercent}%` : "—"}</td>
           <td className={`${cell} text-slate-700 dark:text-slate-300`}>{taka(line.afterDiscountAmount)}</td>
@@ -349,6 +362,9 @@ function LineRow({ line, children }: { line: BillingLine; children: React.ReactN
         <td className="px-3 py-2">
           <input name="treatmentName" value={name} onChange={(e) => setName(e.target.value)}
             placeholder="Procedure" form={`edit-${line.id}`} className={`${field} w-full`} />
+          <input name="description" value={description} onChange={(e) => setDescription(e.target.value)}
+            placeholder="On tooth…" form={`edit-${line.id}`}
+            aria-label="Tooth or detail" className={`${field} mt-1 w-full text-xs`} />
         </td>
         <td className="px-3 py-2">
           {/* re-pricing the procedure releases a seeded payable so it follows again */}

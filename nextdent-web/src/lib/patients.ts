@@ -3,6 +3,35 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { parseTeeth } from "./format";
 
+/**
+ * A jump bigger than this ends the clinic's numbering run. The legacy IDs climb in
+ * steps of at most 26 (records deleted over the years); the one stray 99999 in the
+ * import sits 97,682 past the run. Anything in between is a deliberate one-off.
+ */
+const ID_RUN_GAP = 1000;
+
+/**
+ * The next patient ID in the clinic's own sequence — the number the new-patient form
+ * suggests. The patient ID is the record's key, the "#38" in every list and picker,
+ * and the number the legacy app printed as "Laila Akter-38".
+ *
+ * Not simply MAX(id) + 1. The import carried one patient numbered 99999, and because
+ * the database counter follows the maximum, every patient added since was numbered
+ * 100000 and up instead of continuing at 2318. So this finds where the unbroken run
+ * from the bottom ends and suggests the number after it; outliers above a gap of
+ * ID_RUN_GAP are ignored. The suggestion is always free: everything above the run's
+ * end sits at least ID_RUN_GAP higher.
+ */
+export async function nextPatientId(): Promise<number> {
+  const [row] = await prisma.$queryRaw<{ next: number }[]>`
+    WITH s AS (SELECT id, id - LAG(id) OVER (ORDER BY id) AS gap FROM "Patient"),
+         b AS (SELECT MIN(id) AS cut FROM s WHERE gap > ${ID_RUN_GAP})
+    SELECT (COALESCE(MAX(p.id), 0) + 1)::int AS next
+    FROM "Patient" p, b
+    WHERE b.cut IS NULL OR p.id < b.cut`;
+  return row?.next ?? 1;
+}
+
 export type PatientHit = {
   id: number;
   fullName: string;
@@ -92,12 +121,22 @@ export async function getPatientProfile(id: number) {
 
   // dental chart: FDI tooth → treatment labels, parsed from case & line text
   const teeth: Record<string, string[]> = {};
-  const addTeeth = (text: string | null, label: string) => {
-    for (const t of parseTeeth(text)) (teeth[t] ??= []).push(label);
+  // Both the name and the description can mention the same tooth ("Ext 14" with
+  // "on 14" beside it), so the two are parsed together and the label is recorded
+  // once — otherwise the chart reads "Extraction, Extraction" on tooth 14.
+  const addTeeth = (texts: (string | null)[], label: string) => {
+    const found = new Set(texts.flatMap((t) => parseTeeth(t)));
+    for (const t of found) (teeth[t] ??= []).push(label);
   };
+  // The tooth number is almost never in the procedure name — "Crown Supply" says
+  // nothing — it is in the description the clinic types beside it: "On tooth 36".
+  // Parsing the name alone found teeth on 9 of 8,505 imported lines; reading the
+  // description too finds them on 5,884, which is the difference between an empty
+  // dental chart and a populated one. The label stays the procedure name, because
+  // that is what the chart is meant to show against the tooth.
   for (const c of cases) {
-    addTeeth(c.name, c.name ?? "case");
-    for (const l of c.lines) addTeeth(l.treatmentName, l.treatmentName ?? "treatment");
+    addTeeth([c.name, c.description], c.name ?? "case");
+    for (const l of c.lines) addTeeth([l.treatmentName, l.description], l.treatmentName ?? "treatment");
   }
 
   return {

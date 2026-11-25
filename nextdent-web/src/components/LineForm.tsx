@@ -7,7 +7,7 @@ import { toDateInput, taka } from "@/lib/format";
 import Combo from "@/components/Combo";
 
 type LineLike = {
-  id: number; treatmentName: string | null; treatmentDate: Date | string | null;
+  id: number; treatmentName: string | null; description: string | null; treatmentDate: Date | string | null;
   operatingDoctorId: number | null; totalAmount: number; discountPercent: number; note: string | null;
 };
 type Treatment = { name: string; price: number };
@@ -47,6 +47,12 @@ export default function LineForm({
             options={treatments.map((t) => ({ value: t.name, label: t.name, hint: taka(t.price) }))}
             value={name} onChange={onName} allowCustom
             placeholder="Search catalog…" aria-label="Procedure" className={inputCls} />
+        </label>
+        {/* Rendered in BOTH modes on purpose: saveLine writes this field, so a form
+            that omitted it would clear the tooth on every compact save. */}
+        <label className={compact ? "sm:col-span-2" : ""}>
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Tooth / detail</span>
+          <input name="description" defaultValue={line?.description ?? ""} placeholder="On tooth 36" className={inputCls} />
         </label>
         <label>
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Date</span>

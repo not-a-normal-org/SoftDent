@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { startTransition, useActionState, useState } from "react";
 import { savePatient, type PatientFormState } from "@/lib/actions/patients";
 import { toDateInput } from "@/lib/format";
 import { GENDERS, MARITAL, type PatientFormLists } from "@/lib/patient-constants";
@@ -35,16 +35,48 @@ const initial: PatientFormState = {};
 const inputCls =
   "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500";
 
-export default function PatientForm({ patient, lists }: { patient?: PatientLike; lists: PatientFormLists }) {
+export default function PatientForm({ patient, lists, suggestedId }: {
+  patient?: PatientLike; lists: PatientFormLists;
+  /** the next number in the clinic's sequence, offered for a new patient */
+  suggestedId?: number;
+}) {
   const [state, action, pending] = useActionState(savePatient, initial);
   const p = patient;
   const editing = !!p;
+  const [patientID, setPatientID] = useState(String(p?.id ?? suggestedId ?? ""));
+  // After a clash the server offers the next free number. Swap it into the box on
+  // every response that carries one — compared by response, not by number, because
+  // two clashes in a row can offer the same number and the box must still move off
+  // the refused one. (Adjusting state during render, as AddLine does in billing.)
+  const [seenState, setSeenState] = useState(state);
+  if (state !== seenState) {
+    setSeenState(state);
+    if (state.nextPatientID != null) setPatientID(String(state.nextPatientID));
+  }
 
   return (
-    <form action={action} className="space-y-6">
+    // Submitted by hand rather than through <form action>: React resets a form after
+    // its action runs, so a refused Patient ID used to wipe the name, phone, address
+    // and history along with it. Calling the action ourselves keeps every field.
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        startTransition(() => action(fd));
+      }}
+      className="space-y-6"
+    >
       {editing && <input type="hidden" name="id" value={p!.id} />}
 
       <Section title="Identity">
+        <Field label="Patient ID" error={state.fieldErrors?.patientID}
+          hint={editing
+            ? "The patient's file number. Changing it moves every record to the new number."
+            : "Next in sequence. Change it if the patient already has a number."}>
+          <input name="patientID" value={patientID} onChange={(e) => setPatientID(e.target.value)}
+            inputMode="numeric" pattern="\d*" autoComplete="off"
+            className={`${inputCls} tabular-nums`} />
+        </Field>
         <Field label="Full name" error={state.fieldErrors?.fullName} required className="sm:col-span-2">
           <input name="fullName" defaultValue={p?.fullName ?? ""} required className={inputCls} />
         </Field>
@@ -149,8 +181,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, children, error, required, className = "" }: {
-  label: string; children: React.ReactNode; error?: string; required?: boolean; className?: string;
+function Field({ label, children, error, hint, required, className = "" }: {
+  label: string; children: React.ReactNode; error?: string; hint?: string; required?: boolean; className?: string;
 }) {
   return (
     <label className={`block ${className}`}>
@@ -158,7 +190,9 @@ function Field({ label, children, error, required, className = "" }: {
         {label}{required && <span className="text-rose-500"> *</span>}
       </span>
       {children}
-      {error && <span className="mt-1 block text-xs text-rose-600 dark:text-rose-400">{error}</span>}
+      {error
+        ? <span className="mt-1 block text-xs text-rose-600 dark:text-rose-400">{error}</span>
+        : hint && <span className="mt-1 block text-xs text-slate-400 dark:text-slate-500">{hint}</span>}
     </label>
   );
 }
