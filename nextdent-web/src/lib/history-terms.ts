@@ -28,6 +28,37 @@ export const seedTerms = (v: string | null | undefined): string[] =>
     : (v ?? "").split("\n").map((t) => t.trim()).filter(Boolean);
 
 /**
+ * One row as the clinician typed it \u2192 one term as stored. A "\u2022" inside a row would
+ * split it in two on the next read, because it is the separator, so it goes; runs of
+ * whitespace collapse, as `parseTerms` would collapse them anyway.
+ */
+export const cleanTerm = (t: string): string =>
+  t.replace(/\u2022/g, " ").replace(/\s+/g, " ").trim();
+
+/**
+ * Editable rows \u2192 "\u2022 A \u2022 B". A row left empty is dropped, and so is a lone ".", which
+ * `parseTerms` throws away too \u2014 so what is saved reads back as exactly these rows.
+ */
+export const formatRows = (rows: readonly string[]): string =>
+  formatTerms(rows.map(cleanTerm).filter((t) => t !== "" && t !== "."));
+
+/**
+ * What a term picker posts: the stored value byte for byte while its rows still say
+ * what they said when the form opened, and the rows reformatted only once edited.
+ *
+ * Reformatting on every save would rewrite records nobody touched. A good share of the
+ * imported bullets are not in `formatTerms`'s exact shape \u2014 "\u2022HTN\r\n\r\n \u2022DM",
+ * "\u2022 HTN  \u2022 CABG": 1,365 of the stored values in Nov 2026 \u2014 so opening a prescription
+ * and saving it unchanged used to rewrite them, and on a patient's history it logged a
+ * new version for an edit nobody made. Old prose stays prose for the same reason, until
+ * a row of it is changed.
+ */
+export const termsToPost = (original: string | null | undefined, rows: readonly string[]): string => {
+  const now = formatRows(rows);
+  return now === formatRows(seedTerms(original)) ? (original ?? "") : now;
+};
+
+/**
  * A drug the patient is already taking: what it is, how long they have been on it,
  * and since when.
  */
@@ -59,10 +90,16 @@ export const parseDrugHistory = (v: string | null | undefined): DrugHistoryRow[]
 export const formatDrugHistory = (rows: readonly DrugHistoryRow[]): string =>
   formatTerms(
     rows
-      .filter((r) => r.drug.trim())
-      .map((r) =>
-        [r.drug.trim(), r.duration.trim(), r.since.trim() && `since ${r.since.trim()}`]
-          .filter(Boolean)
-          .join(PART)
-      )
+      .map((r) => ({ drug: cleanTerm(r.drug), duration: cleanTerm(r.duration), since: cleanTerm(r.since) }))
+      .filter((r) => r.drug)
+      .map((r) => [r.drug, r.duration, r.since && `since ${r.since}`].filter(Boolean).join(PART))
   );
+
+/** `termsToPost` for drug history: an untouched list goes back exactly as it came. */
+export const drugHistoryToPost = (
+  original: string | null | undefined,
+  rows: readonly DrugHistoryRow[]
+): string => {
+  const now = formatDrugHistory(rows);
+  return now === formatDrugHistory(parseDrugHistory(original)) ? (original ?? "") : now;
+};
