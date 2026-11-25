@@ -1,17 +1,75 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
-import { getBillingOverview } from "@/lib/billing";
+import {
+  getBillingOverview, listPatientBalances, BALANCE_SORTS, BALANCE_STATUSES, BALANCE_PERIODS, BALANCE_PAGE_SIZE,
+  type BalanceSort, type BalanceStatus, type BalancePeriod,
+} from "@/lib/billing";
 import { taka, fmtDate } from "@/lib/format";
 
-export default async function BillingPage() {
+type Params = { q?: string; status?: string; period?: string; sort?: string; dir?: string; page?: string };
+
+const DEFAULTS = { status: "dues", period: "any", sort: "due", dir: "desc" } as const;
+const pick = <T extends string>(v: string | undefined, allowed: readonly T[], dflt: T): T =>
+  (allowed as readonly string[]).includes(v ?? "") ? (v as T) : dflt;
+
+// the direction a column sorts in the first time it is clicked
+const FIRST_DIR: Record<BalanceSort, "asc" | "desc"> = {
+  due: "desc", billed: "desc", paid: "desc", lastVisit: "desc", name: "asc", id: "asc",
+};
+
+const STATUS_LABEL: Record<BalanceStatus, string> = { dues: "With dues", all: "All", paid: "Paid up", credit: "In credit" };
+const PERIOD_LABEL: Record<BalancePeriod, string> = {
+  any: "Any time", "30d": "Last 30 days", "90d": "Last 90 days", "1y": "Last 12 months", older: "Over a year ago",
+};
+
+// A balance below zero is money the clinic is holding — credit, not "৳-100 due".
+const dueText = (n: number) => (n < 0 ? `${taka(-n)} credit` : taka(n));
+const dueTone = (n: number) =>
+  n > 0 ? "text-rose-600 dark:text-rose-400" : n < 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-slate-500";
+
+export default async function BillingPage({ searchParams }: { searchParams: Promise<Params> }) {
   await requireUser();
-  const { billed, paid, due, dues, recentPayments } = await getBillingOverview();
+  const sp = await searchParams;
+  const q = (sp.q ?? "").trim();
+  const status = pick(sp.status, BALANCE_STATUSES, DEFAULTS.status);
+  const period = pick(sp.period, BALANCE_PERIODS, DEFAULTS.period);
+  const sort = pick(sp.sort, BALANCE_SORTS, DEFAULTS.sort);
+  const dir = pick(sp.dir, ["asc", "desc"] as const, DEFAULTS.dir);
+  const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
+
+  const [{ billed, paid, due, recentPayments }, list] = await Promise.all([
+    getBillingOverview(),
+    listPatientBalances({ q, status, period, sort, dir, page }),
+  ]);
+
+  // Every link rebuilds the URL from the current state plus one change, and drops
+  // anything at its default, so the address stays short and shareable. Changing a
+  // filter, search or sort returns to page 1; only the pager moves pages.
+  const current = { q, status, period, sort, dir };
+  const href = (change: Partial<typeof current> & { page?: number }) => {
+    const next = { ...current, page: 1, ...change };
+    const u = new URLSearchParams();
+    if (next.q) u.set("q", next.q);
+    for (const k of ["status", "period", "sort", "dir"] as const) if (next[k] !== DEFAULTS[k]) u.set(k, next[k]);
+    if (next.page > 1) u.set("page", String(next.page));
+    const s = u.toString();
+    return s ? `/billing?${s}#balances` : "/billing#balances";
+  };
+  const sortHref = (col: BalanceSort) =>
+    href({ sort: col, dir: sort === col ? (dir === "asc" ? "desc" : "asc") : FIRST_DIR[col] });
 
   const kpis = [
     { label: "Total billed", value: taka(billed), tone: "bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-200" },
     { label: "Collected", value: taka(paid), tone: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
     { label: "Outstanding", value: taka(due), tone: "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300" },
   ];
+
+  const from = list.total === 0 ? 0 : (list.page - 1) * BALANCE_PAGE_SIZE + 1;
+  const to = Math.min(list.page * BALANCE_PAGE_SIZE, list.total);
+  const chip = (active: boolean) =>
+    `rounded-full px-3 py-1 text-xs font-medium transition ${active
+      ? "bg-teal-600 text-white"
+      : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"}`;
 
   return (
     <div className="space-y-6">
@@ -26,46 +84,153 @@ export default async function BillingPage() {
         ))}
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 dark:border-slate-800">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Patients with dues</h2>
-            <span className="text-xs text-slate-400">{dues.length}</span>
+      <section id="balances" className="scroll-mt-20 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="space-y-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Patient balances</h2>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {list.total.toLocaleString()} {list.total === 1 ? "patient" : "patients"}
+              {status !== "paid" && <> · <span className={`font-medium tabular-nums ${dueTone(list.totalDue)}`}>{dueText(list.totalDue)}</span> {list.totalDue < 0 ? "held" : "outstanding"}</>}
+            </span>
           </div>
-          {dues.length === 0 ? <p className="px-5 py-6 text-center text-sm text-slate-500 dark:text-slate-400">No outstanding dues.</p> : (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {dues.map((d) => (
-                <li key={d.id}>
-                  <Link href={`/patients/${d.id}`} className="flex items-center justify-between px-5 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <span className="text-slate-800 dark:text-slate-200">{d.fullName}</span>
-                    <span className="font-medium tabular-nums text-rose-600 dark:text-rose-400">{taka(d.due)}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
 
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-900 dark:border-slate-800 dark:text-slate-100">Recent payments</h2>
-          {recentPayments.length === 0 ? <p className="px-5 py-6 text-center text-sm text-slate-500 dark:text-slate-400">No payments recorded.</p> : (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {recentPayments.map((p) => {
-                const pat = p.treatmentLine.case.patient;
-                return (
-                  <li key={p.id} className="flex items-center justify-between px-5 py-2.5 text-sm">
-                    <span className="min-w-0">
-                      <Link href={`/patients/${pat.id}`} className="text-slate-800 hover:text-teal-700 dark:text-slate-200 dark:hover:text-teal-400">{pat.fullName}</Link>
-                      <span className="block text-xs text-slate-400">{fmtDate(p.paidAt)}{p.method ? ` · ${p.method}` : ""}</span>
-                    </span>
-                    <span className="font-medium tabular-nums text-emerald-600 dark:text-emerald-400">{taka(p.amount)}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      </div>
+          {/* a plain GET form: the other filters ride along as hidden fields */}
+          <form action="/billing" className="flex gap-2">
+            {status !== DEFAULTS.status && <input type="hidden" name="status" value={status} />}
+            {period !== DEFAULTS.period && <input type="hidden" name="period" value={period} />}
+            {sort !== DEFAULTS.sort && <input type="hidden" name="sort" value={sort} />}
+            {dir !== DEFAULTS.dir && <input type="hidden" name="dir" value={dir} />}
+            <input name="q" defaultValue={q} placeholder="Search by name, phone or patient ID…" aria-label="Search patients"
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500" />
+            <button className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700">Search</button>
+            {q && <Link href={href({ q: "" })} className="self-center px-1 text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">Clear</Link>}
+          </form>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <nav aria-label="Balance status" className="flex flex-wrap gap-1.5">
+              {BALANCE_STATUSES.map((st) => (
+                <Link key={st} href={href({ status: st })} className={chip(st === status)} aria-current={st === status ? "true" : undefined}>
+                  {STATUS_LABEL[st]} <span className="tabular-nums opacity-75">{list.counts[st].toLocaleString()}</span>
+                </Link>
+              ))}
+            </nav>
+            <nav aria-label="Last visit" className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-slate-400">Last visit</span>
+              {BALANCE_PERIODS.map((pd) => (
+                <Link key={pd} href={href({ period: pd })} className={chip(pd === period)} aria-current={pd === period ? "true" : undefined}>
+                  {PERIOD_LABEL[pd]}
+                </Link>
+              ))}
+            </nav>
+          </div>
+        </div>
+
+        {list.rows.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+            {q ? <>No patients match “{q}” here.</> : "No patients in this view."}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="text-left text-xs text-slate-400 dark:text-slate-500">
+                  <SortTh label="ID" col="id" sort={sort} dir={dir} href={sortHref("id")} />
+                  <SortTh label="Patient" col="name" sort={sort} dir={dir} href={sortHref("name")} />
+                  <SortTh label="Last visit" col="lastVisit" sort={sort} dir={dir} href={sortHref("lastVisit")} />
+                  <SortTh label="Billed" col="billed" sort={sort} dir={dir} href={sortHref("billed")} right />
+                  <SortTh label="Paid" col="paid" sort={sort} dir={dir} href={sortHref("paid")} right />
+                  <SortTh label="Due" col="due" sort={sort} dir={dir} href={sortHref("due")} right />
+                </tr>
+              </thead>
+              <tbody>
+                {list.rows.map((r) => (
+                  <tr key={r.id} className="border-t border-slate-50 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/50">
+                    <td className="whitespace-nowrap px-5 py-2.5 tabular-nums text-slate-400 dark:text-slate-500">#{r.id}</td>
+                    <td className="px-5 py-2.5">
+                      <Link href={`/patients/${r.id}`} className="font-medium text-slate-800 hover:text-teal-700 dark:text-slate-200 dark:hover:text-teal-400">{r.fullName}</Link>
+                      {r.primaryPhone && <span className="block text-xs text-slate-400 dark:text-slate-500">{r.primaryPhone}</span>}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-2.5 text-slate-500 dark:text-slate-400">{r.lastVisit ? fmtDate(r.lastVisit) : "—"}</td>
+                    <td className="whitespace-nowrap px-5 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{taka(r.billed)}</td>
+                    <td className="whitespace-nowrap px-5 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{taka(r.paid)}</td>
+                    <td className={`whitespace-nowrap px-5 py-2.5 text-right font-medium tabular-nums ${dueTone(r.due)}`}>{dueText(r.due)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {list.total > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm dark:border-slate-800">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Showing <span className="tabular-nums">{from.toLocaleString()}–{to.toLocaleString()}</span> of <span className="tabular-nums">{list.total.toLocaleString()}</span>
+            </span>
+            {list.pages > 1 && <Pager page={list.page} pages={list.pages} href={(n) => href({ page: n })} />}
+          </div>
+        )}
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-900 dark:border-slate-800 dark:text-slate-100">Recent payments</h2>
+        {recentPayments.length === 0 ? <p className="px-5 py-6 text-center text-sm text-slate-500 dark:text-slate-400">No payments recorded.</p> : (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {recentPayments.map((p) => {
+              const pat = p.treatmentLine.case.patient;
+              return (
+                <li key={p.id} className="flex items-center justify-between px-5 py-2.5 text-sm">
+                  <span className="min-w-0">
+                    <Link href={`/patients/${pat.id}`} className="text-slate-800 hover:text-teal-700 dark:text-slate-200 dark:hover:text-teal-400">{pat.fullName}</Link>
+                    <span className="block text-xs text-slate-400">{fmtDate(p.paidAt)}{p.method ? ` · ${p.method}` : ""}</span>
+                  </span>
+                  <span className="font-medium tabular-nums text-emerald-600 dark:text-emerald-400">{taka(p.amount)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </div>
+  );
+}
+
+function SortTh({ label, col, sort, dir, href, right = false }: {
+  label: string; col: BalanceSort; sort: BalanceSort; dir: "asc" | "desc"; href: string; right?: boolean;
+}) {
+  const active = sort === col;
+  return (
+    <th className={`px-5 py-2 font-medium ${right ? "text-right" : ""}`}
+      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}>
+      <Link href={href} className={`inline-flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-200 ${active ? "text-slate-700 dark:text-slate-200" : ""}`}>
+        {label}
+        <span aria-hidden className={active ? "" : "opacity-0"}>{active && dir === "asc" ? "▲" : "▼"}</span>
+      </Link>
+    </th>
+  );
+}
+
+/** First, last, and the pages around the current one, with gaps shown as "…". */
+function Pager({ page, pages, href }: { page: number; pages: number; href: (n: number) => string }) {
+  const nums = [...new Set([1, page - 2, page - 1, page, page + 1, page + 2, pages])]
+    .filter((n) => n >= 1 && n <= pages).sort((a, b) => a - b);
+  const btn = "grid h-8 min-w-8 place-items-center rounded-md px-2 text-xs tabular-nums";
+  const idle = `${btn} text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800`;
+  return (
+    <nav aria-label="Pages" className="flex items-center gap-1">
+      {page > 1
+        ? <Link href={href(page - 1)} className={idle} aria-label="Previous page">‹</Link>
+        : <span className={`${btn} text-slate-300 dark:text-slate-600`}>‹</span>}
+      {nums.map((n, i) => (
+        <span key={n} className="flex items-center gap-1">
+          {i > 0 && n - nums[i - 1] > 1 && <span className="px-1 text-xs text-slate-400">…</span>}
+          {n === page
+            ? <span className={`${btn} bg-teal-600 font-medium text-white`} aria-current="page">{n}</span>
+            : <Link href={href(n)} className={idle}>{n}</Link>}
+        </span>
+      ))}
+      {page < pages
+        ? <Link href={href(page + 1)} className={idle} aria-label="Next page">›</Link>
+        : <span className={`${btn} text-slate-300 dark:text-slate-600`}>›</span>}
+    </nav>
   );
 }
