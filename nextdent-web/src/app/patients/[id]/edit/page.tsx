@@ -4,7 +4,6 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getPatientFormLists } from "@/lib/lookups";
 import PatientForm from "@/components/PatientForm";
-import { placesConfigured } from "@/lib/places";
 
 export default async function EditPatientPage({ params }: { params: Promise<{ id: string }> }) {
   await requireUser();
@@ -26,7 +25,7 @@ export default async function EditPatientPage({ params }: { params: Promise<{ id
       <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
         Edit — {patient.fullName}
       </h1>
-      <PatientForm patient={patient} lists={lists} addressSuggestions={placesConfigured()} />
+      <PatientForm patient={patient} lists={lists} />
     </div>
   );
 }

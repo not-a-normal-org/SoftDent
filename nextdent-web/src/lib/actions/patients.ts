@@ -155,7 +155,28 @@ export async function savePatient(_prev: PatientFormState, fd: FormData): Promis
     return { error: "Could not save the patient. Please try again." };
   }
 
+  await rememberAddress(data.address);
+
   revalidatePath("/patients");
   revalidatePath(`/patients/${savedId}`);
   redirect(`/patients/${savedId}`); // throws — outside try/catch
+}
+
+/**
+ * A new address joins the clinic's address list, so the next patient from the same
+ * place finds it in the dropdown. Matched without regard to case or surrounding space,
+ * so "kuriana" does not add a second "Kuriana". Best effort: the patient is already
+ * saved, and a list that missed one entry must not turn that into an error.
+ */
+async function rememberAddress(address: string | null) {
+  if (!address) return;
+  try {
+    await prisma.$executeRaw`
+      INSERT INTO "AddressPreset" (value)
+      SELECT ${address}
+      WHERE NOT EXISTS (SELECT 1 FROM "AddressPreset" WHERE lower(trim(value)) = lower(trim(${address})))
+      ON CONFLICT (value) DO NOTHING`;
+  } catch (e) {
+    console.error("rememberAddress failed", e);
+  }
 }

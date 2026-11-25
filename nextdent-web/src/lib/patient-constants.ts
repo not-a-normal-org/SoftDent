@@ -12,4 +12,6 @@ export type PatientFormLists = {
   doctors: { id: number; name: string }[];
   /** medical-history terms the clinic already uses, commonest first */
   medicalTerms: string[];
+  /** the clinic's address list, most-used first; hint = how many patients live there */
+  addresses: { value: string; label: string; hint?: string }[];
 };
