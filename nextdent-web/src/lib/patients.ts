@@ -73,6 +73,24 @@ export async function searchPatients(q: string, limit = 20): Promise<PatientHit[
     LIMIT ${limit}`;
 }
 
+/**
+ * The search box's rules as a SQL condition, for list queries that join "Patient" as
+ * `p`: digits match the phone (dash-insensitive) or the patient ID, anything else the
+ * name or nickname. Shared so that "01711" or "Rahim" finds the same people in the
+ * billing table, the missed-appointments list and the type-ahead.
+ */
+export function patientSearchSql(q: string): Prisma.Sql {
+  const term = q.trim();
+  if (!term) return Prisma.sql`TRUE`;
+  if (/^[\d\s-]+$/.test(term)) {
+    const dg = term.replace(/\D/g, "");
+    if (!dg) return Prisma.sql`TRUE`;
+    return Prisma.sql`(p."phoneDigits" LIKE ${"%" + dg + "%"} OR CAST(p.id AS text) = ${dg})`;
+  }
+  const like = `%${term}%`;
+  return Prisma.sql`(p."fullName" ILIKE ${like} OR p."nickName" ILIKE ${like})`;
+}
+
 /** Most-recently-added patients, for the empty-state / landing list. */
 export function recentPatients(limit = 25) {
   return prisma.patient.findMany({
