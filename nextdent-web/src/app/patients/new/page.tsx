@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { getPatientFormLists } from "@/lib/lookups";
 import { nextPatientId } from "@/lib/patients";
 import PatientForm from "@/components/PatientForm";
+import { placesConfigured } from "@/lib/places";
 
 export default async function NewPatientPage() {
   await requireUser();
@@ -14,7 +15,7 @@ export default async function NewPatientPage() {
         ← All patients
       </Link>
       <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">New patient</h1>
-      <PatientForm lists={lists} suggestedId={suggestedId} />
+      <PatientForm lists={lists} suggestedId={suggestedId} addressSuggestions={placesConfigured()} />
     </div>
   );
 }

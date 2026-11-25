@@ -6,6 +6,7 @@ import { savePatient, type PatientFormState } from "@/lib/actions/patients";
 import { toDateInput } from "@/lib/format";
 import { GENDERS, MARITAL, type PatientFormLists } from "@/lib/patient-constants";
 import Combo from "@/components/Combo";
+import AddressField from "@/components/AddressField";
 import { MedicalHistoryField, DrugHistoryField } from "@/components/HistoryFields";
 
 type PatientLike = {
@@ -35,10 +36,12 @@ const initial: PatientFormState = {};
 const inputCls =
   "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500";
 
-export default function PatientForm({ patient, lists, suggestedId }: {
+export default function PatientForm({ patient, lists, suggestedId, addressSuggestions = false }: {
   patient?: PatientLike; lists: PatientFormLists;
   /** the next number in the clinic's sequence, offered for a new patient */
   suggestedId?: number;
+  /** true when the server has a Google key, so the address box can suggest addresses */
+  addressSuggestions?: boolean;
 }) {
   const [state, action, pending] = useActionState(savePatient, initial);
   const p = patient;
@@ -111,7 +114,8 @@ export default function PatientForm({ patient, lists, suggestedId }: {
           <input type="email" name="email" defaultValue={p?.email ?? ""} className={inputCls} />
         </Field>
         <Field label="Address" className="sm:col-span-2">
-          <input name="address" defaultValue={p?.address ?? ""} className={inputCls} />
+          <AddressField name="address" defaultValue={p?.address} suggest={addressSuggestions}
+            placeholder={addressSuggestions ? "Start typing — suggestions from Google" : undefined} className={inputCls} />
         </Field>
       </Section>
 
